@@ -1,1 +1,2991 @@
-<p>test good</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Clearbot — Team</title>
+<meta name="description" content="Internal client manager for the Clearbot team." />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<!--
+  ============================================================================
+  Clearbot Team — Admin RLS prerequisites
+  ============================================================================
+  The client portal uses per-user RLS (auth.uid() = user_id). For this
+  dashboard to see and edit other users' rows, run the following once in
+  the Supabase SQL editor. The UI still loads without it, but tables will
+  appear empty and writes will silently no-op.
+
+    create or replace function public.is_team_member()
+    returns boolean language sql stable security definer
+    set search_path = public as $$
+      select exists (select 1 from public.profiles
+        where user_id = auth.uid() and role in ('admin','team'));
+    $$;
+
+    create policy "profiles_team_all"     on public.profiles
+      for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "projects_team_all"     on public.projects
+      for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "deliverables_team_all" on public.deliverables
+      for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "invoices_team_all"     on public.invoices
+      for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "threads_team_all"      on public.message_threads
+      for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "activity_team_all"     on public.activity
+      for all using (public.is_team_member()) with check (public.is_team_member());
+
+    update public.profiles set role='admin' where email='ethan@clearbot.io';
+  ============================================================================
+-->
+<style>
+:root {
+  --bg: #0a0b0d;
+  --bg-elev: #101114;
+  --bg-elev-2: #14151a;
+  --ink: #f3f1ea;
+  --ink-dim: #8a8880;
+  --ink-faint: #3a3a38;
+  --rule: rgba(243, 241, 234, 0.08);
+  --rule-strong: rgba(243, 241, 234, 0.16);
+  --accent: #ffffff;
+  --accent-dim: #c8c6bf;
+  --ok: #9ccc9f;
+  --warn: #d8c177;
+  --bad: #d88c7c;
+  --grid: rgba(243, 241, 234, 0.035);
+  --display: "Fraunces", "Times New Roman", serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --sidebar-w: 240px;
+  --topbar-h: 64px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body { min-height: 100vh; min-height: 100dvh; position: relative; }
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 64px 64px;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse 100% 80% at 60% 30%, #000 40%, transparent 95%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 80% at 60% 30%, #000 40%, transparent 95%);
+}
+.grain {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.splash {
+  position: fixed; inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--ink-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+}
+.splash .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+html[data-auth="signed-in"] .splash { display: none; }
+.app { opacity: 0; transition: opacity 0.25s var(--ease); }
+html[data-auth="signed-in"] .app { opacity: 1; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+.app {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
+  min-height: 100vh; min-height: 100dvh;
+}
+.topbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr auto;
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  background: rgba(10, 11, 13, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 24px; height: 100%;
+  border-right: 1px solid var(--rule);
+  color: var(--ink); text-decoration: none;
+}
+.topbar .brand .mark-logo {
+  color: var(--accent);
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.12));
+  display: block;
+}
+.topbar .brand-name {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.topbar .brand-name em {
+  font-weight: 300;
+  font-style: italic;
+  color: var(--ink-dim);
+  margin-left: 2px;
+}
+.topbar .crumbs {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 24px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+}
+.topbar .crumbs .sep { color: var(--ink-faint); }
+.topbar .crumbs .here { color: var(--ink); }
+.topbar .user {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--rule);
+  cursor: pointer;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 24px; height: 100%;
+  color: var(--ink);
+  font-family: var(--mono);
+}
+.topbar .user:hover { background: rgba(243, 241, 234, 0.03); }
+.topbar .user .avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--rule-strong);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-size: 13px;
+  color: var(--ink);
+}
+.topbar .user .name {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+.sidebar {
+  border-right: 1px solid var(--rule);
+  padding: 20px 14px;
+  display: flex; flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: var(--topbar-h);
+  height: calc(100vh - var(--topbar-h));
+  height: calc(100dvh - var(--topbar-h));
+  overflow-y: auto;
+}
+.sidebar-group {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--ink-faint);
+  padding: 18px 12px 10px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  border-radius: 2px;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+  position: relative;
+  background: transparent;
+  border: 0;
+  font-family: var(--mono);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.nav-item:hover { background: rgba(243, 241, 234, 0.03); color: var(--ink); }
+.nav-item[aria-current="page"] {
+  color: var(--ink);
+  background: rgba(243, 241, 234, 0.04);
+}
+.nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 22%; bottom: 22%;
+  width: 2px;
+  background: var(--accent);
+}
+.nav-item .icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.85; }
+.sidebar .spacer { flex: 1; min-height: 20px; }
+.sidebar .foot {
+  border-top: 1px dashed var(--rule);
+  padding: 14px 12px 6px;
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+.sidebar .foot a { color: var(--ink-dim); text-decoration: none; }
+.sidebar .foot a:hover { color: var(--ink); }
+.main { padding: 36px 44px 60px; min-width: 0; }
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+.page-head .eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+.page-head h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(32px, 3.6vw, 44px);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.page-head h1 em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-dim);
+}
+.page-head .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn {
+  appearance: none;
+  border: 1px solid var(--rule-strong);
+  background: rgba(243, 241, 234, 0.02);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  padding: 10px 18px;
+  border-radius: 2px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.btn:hover { background: rgba(243, 241, 234, 0.06); border-color: rgba(243, 241, 234, 0.22); }
+.btn[disabled] { opacity: 0.6; cursor: wait; }
+.btn-primary {
+  background: var(--accent);
+  color: #0a0b0d;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: #f5f5f5; border-color: #f5f5f5; }
+.btn-sm { padding: 7px 12px; font-size: 10px; letter-spacing: 0.14em; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-dim); }
+.btn-ghost:hover { background: rgba(243, 241, 234, 0.04); color: var(--ink); border-color: transparent; }
+.save-msg {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  min-width: 80px;
+}
+.panel {
+  position: relative;
+  border: 1px solid var(--rule-strong);
+  background: linear-gradient(180deg, rgba(243, 241, 234, 0.025), rgba(243, 241, 234, 0.005));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 2px;
+  padding: 22px 24px;
+}
+.panel.bracketed::before {
+  content: ""; position: absolute;
+  top: -1px; left: -1px;
+  width: 12px; height: 12px;
+  border-top: 1px solid var(--accent);
+  border-left: 1px solid var(--accent);
+}
+.panel.bracketed::after {
+  content: ""; position: absolute;
+  bottom: -1px; right: -1px;
+  width: 12px; height: 12px;
+  border-bottom: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+}
+.panel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--rule);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-dim);
+}
+.panel-head h2 {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-dim);
+}
+.panel-head .action { color: var(--ink-dim); font-size: 10px; text-decoration: none; background: transparent; border: 0; cursor: pointer; font-family: var(--mono); }
+.panel-head .action:hover { color: var(--ink); }
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.tile {
+  position: relative;
+  padding: 20px 22px;
+  border: 1px solid var(--rule);
+  background: rgba(243, 241, 234, 0.015);
+  border-radius: 2px;
+}
+.tile .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-bottom: 12px;
+}
+.tile .val {
+  font-family: var(--display);
+  font-size: 40px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1;
+}
+.tile .val small {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-left: 4px;
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.tile .delta {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.grid-2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; }
+.grid-2-equal { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.feed { display: flex; flex-direction: column; }
+.feed-item {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--rule);
+  align-items: start;
+}
+.feed-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.feed-item:first-child { padding-top: 0; }
+.feed-dot {
+  width: 8px; height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.feed-item.new .feed-dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(255,255,255,0.35);
+}
+.feed-text { font-size: 13px; color: var(--ink); line-height: 1.5; }
+.feed-text em { color: var(--ink-dim); font-style: italic; font-family: var(--display); font-weight: 300; }
+.feed-text .proj {
+  color: var(--ink-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  display: block;
+  margin-bottom: 4px;
+}
+.feed-text .who {
+  color: var(--ink-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  display: block;
+  margin-bottom: 2px;
+}
+.feed-time {
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+.proj-list { display: flex; flex-direction: column; gap: 16px; }
+.proj-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--rule);
+  cursor: pointer;
+  background: transparent;
+  border-left: 0; border-right: 0; border-top: 0;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.proj-card:last-child { border-bottom: 0; padding-bottom: 0; }
+.proj-card:first-child { padding-top: 0; }
+.proj-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.proj-card-name { font-family: var(--display); font-size: 16px; color: var(--ink); }
+.proj-card-bar { display: flex; align-items: center; gap: 10px; }
+.table-wrap {
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(243, 241, 234, 0.012);
+}
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td {
+  text-align: left;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.table th {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  background: rgba(243, 241, 234, 0.025);
+}
+.table tr:last-child td { border-bottom: 0; }
+.table tbody tr { transition: background 0.18s var(--ease); }
+.table tbody tr:hover { background: rgba(243, 241, 234, 0.02); }
+.table tbody tr.is-clickable { cursor: pointer; }
+.table .proj-name {
+  font-family: var(--display);
+  font-size: 16px;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.table .sub {
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-top: 3px;
+}
+.table .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+}
+.table .num {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--display);
+  font-size: 15px;
+}
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  padding: 4px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  background: rgba(243, 241, 234, 0.02);
+  white-space: nowrap;
+}
+.badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.badge.ok { color: var(--ok); border-color: rgba(156, 204, 159, 0.28); }
+.badge.warn { color: var(--warn); border-color: rgba(216, 193, 119, 0.28); }
+.badge.bad { color: var(--bad); border-color: rgba(216, 140, 124, 0.28); }
+.badge.accent { color: var(--accent); border-color: rgba(255, 255, 255, 0.28); }
+.progress {
+  height: 4px;
+  background: rgba(243, 241, 234, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  flex: 1; min-width: 80px;
+  display: inline-block;
+  position: relative;
+}
+.progress-bar { display: block; height: 100%; background: var(--accent); }
+.files { display: flex; flex-direction: column; gap: 8px; }
+.file {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 14px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: rgba(243, 241, 234, 0.012);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.file:hover { border-color: var(--rule-strong); background: rgba(243, 241, 234, 0.025); }
+.file-ico {
+  width: 40px; height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+.file-name { font-family: var(--display); font-size: 15px; color: var(--ink); }
+.file-meta {
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-top: 3px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  padding: 22px 0;
+  border-bottom: 1px dashed var(--rule);
+  align-items: start;
+}
+.form-row:last-child { border-bottom: 0; }
+.form-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  padding-top: 12px;
+}
+.form-help {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-faint);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-top: 6px;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 300;
+}
+.input, .select, .textarea {
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 12px 14px;
+  border-radius: 2px;
+  outline: 0;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+.textarea {
+  resize: vertical;
+  min-height: 110px;
+  font-family: var(--display);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.msg-shell {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  min-height: 480px;
+  overflow: hidden;
+  background: rgba(243, 241, 234, 0.012);
+}
+.msg-list { border-right: 1px solid var(--rule); display: flex; flex-direction: column; }
+.msg-threads { overflow-y: auto; flex: 1; }
+.msg-thread {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  transition: background 0.18s var(--ease);
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.msg-thread:hover { background: rgba(243, 241, 234, 0.02); }
+.msg-thread.active { background: rgba(243, 241, 234, 0.05); border-left: 2px solid var(--accent); padding-left: 14px; }
+.msg-thread .title {
+  font-family: var(--display);
+  font-size: 15px;
+  color: var(--ink);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.msg-thread .preview {
+  font-size: 11px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msg-thread .meta {
+  font-size: 9px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-top: 6px;
+}
+.msg-thread .unread-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.msg-pane { display: flex; flex-direction: column; }
+.msg-pane-head {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.msg-pane-head .title { font-family: var(--display); font-size: 18px; color: var(--ink); }
+.msg-pane-head .sub { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.18em; margin-top: 3px; }
+.msg-pane-body {
+  flex: 1;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+.empty { text-align: center; color: var(--ink-dim); padding: 48px 24px; }
+.empty .headline {
+  font-family: var(--display);
+  font-size: 22px;
+  color: var(--ink);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+.empty p {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 14px;
+  color: var(--ink-dim);
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.section { margin-bottom: 32px; }
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.section-head h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.section-head .sub {
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+.subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+}
+.subtab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  white-space: nowrap;
+}
+.subtab:hover { color: var(--ink); }
+.subtab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.detail-pane[hidden] { display: none; }
+.search-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+.search-bar .input { flex: 1; }
+.search-bar .count {
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+.toast {
+  position: fixed;
+  right: 24px; bottom: 24px;
+  z-index: 1001;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  padding: 12px 16px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+  max-width: 320px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.ok { border-color: rgba(156, 204, 159, 0.5); }
+.toast.bad { border-color: rgba(216, 140, 124, 0.5); color: var(--bad); }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 6, 8, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+.modal-backdrop.is-open { opacity: 1; }
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 30px 32px 26px;
+  transform: translateY(10px);
+  opacity: 0.8;
+  transition: transform 0.22s var(--ease), opacity 0.22s var(--ease);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+.modal-backdrop.is-open .modal { transform: translateY(0); opacity: 1; }
+.modal::before {
+  content: ""; position: absolute;
+  top: -1px; left: -1px;
+  width: 14px; height: 14px;
+  border-top: 1px solid var(--accent);
+  border-left: 1px solid var(--accent);
+  pointer-events: none;
+}
+.modal::after {
+  content: ""; position: absolute;
+  bottom: -1px; right: -1px;
+  width: 14px; height: 14px;
+  border-bottom: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}
+.modal-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-dim);
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+  line-height: 0;
+}
+.modal-close:hover { color: var(--ink); background: rgba(243, 241, 234, 0.05); }
+.modal-close svg { width: 14px; height: 14px; display: block; }
+.modal-head {
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px dashed var(--rule);
+}
+.modal-eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+.modal-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.modal-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--ink-dim);
+}
+.modal-field { margin-bottom: 16px; }
+.modal-field:last-child { margin-bottom: 0; }
+.modal-field .form-label {
+  padding-top: 0;
+  margin-bottom: 8px;
+  display: block;
+}
+.modal-prose {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+.modal-prose + .modal-prose { margin-top: 10px; }
+.modal-prose strong { color: var(--ink); font-weight: 400; font-style: normal; }
+.modal-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 140, 124, 0.28);
+  border-radius: 2px;
+  background: rgba(216, 140, 124, 0.06);
+  color: var(--bad);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.modal-actions {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--rule);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.btn-danger {
+  background: var(--bad);
+  color: #1a0f0c;
+  border-color: var(--bad);
+}
+.btn-danger:hover {
+  background: #e29e90;
+  border-color: #e29e90;
+}
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: var(--topbar-h) auto 1fr; }
+  .topbar { grid-template-columns: auto 1fr auto; }
+  .topbar .brand { border-right: 0; padding: 0 16px; }
+  .topbar .crumbs { display: none; }
+  .sidebar {
+    position: relative;
+    top: 0;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 12px;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .sidebar-group, .sidebar .spacer, .sidebar .foot { display: none; }
+  .nav-item { white-space: nowrap; padding: 8px 12px; width: auto; }
+  .nav-item[aria-current="page"]::before { display: none; }
+  .nav-item[aria-current="page"] { background: rgba(255,255,255,0.08); }
+  .main { padding: 24px 20px 60px; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .grid-2-equal { grid-template-columns: 1fr; }
+  .msg-shell { grid-template-columns: 1fr; min-height: 420px; }
+  .msg-list { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 240px; }
+  .form-row { grid-template-columns: 1fr; gap: 8px; }
+  .form-label { padding-top: 0; }
+}
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: 1fr; }
+  .topbar .user .name { display: none; }
+  .table th, .table td { padding: 12px; font-size: 12px; }
+  .page-head { flex-direction: column; align-items: flex-start; }
+  .modal-backdrop { padding: 16px; }
+  .modal { padding: 24px 20px 20px; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; justify-content: center; }
+  .form-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="splash" aria-hidden="true"><span class="dot"></span><span>Checking session&hellip;</span></div>
+<div class="grain" aria-hidden="true"></div>
+
+<svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="clearbot-logo" viewBox="0 0 1008 1008">
+    <path fill="currentColor" fill-rule="evenodd" d="M 599.65 123.37 C 598.82 123.43, 554.92 123.57, 502.10 123.68 C 417.01 123.87, 405.24 123.98, 398.76 124.72 C 376.93 127.21, 352.85 132.01, 333.73 137.70 C 319.60 141.90, 298.89 148.98, 290.34 152.54 C 278.05 157.65, 268.81 162.12, 255.72 169.30 C 229.45 183.70, 213.95 193.68, 198.12 206.39 C 190.61 212.41, 177.54 223.81, 169.64 231.22 C 154.40 245.50, 137.45 264.55, 123.53 283.04 C 116.32 292.62, 111.23 300.34, 102.73 314.57 C 91.93 332.68, 85.06 345.81, 78.89 360.19 C 73.81 372.02, 64.09 400.35, 59.78 415.86 C 55.11 432.66, 51.06 453.06, 48.95 470.34 C 47.02 486.20, 46.29 498.27, 46.28 514.71 C 46.26 536.04, 47.50 555.88, 49.96 573.69 C 52.00 588.41, 57.08 610.96, 62.34 628.64 C 64.91 637.27, 75.58 667.56, 78.14 673.48 C 80.81 679.66, 88.82 696.02, 92.22 702.24 C 93.97 705.43, 100.14 715.64, 105.95 724.92 C 113.99 737.77, 118.41 744.23, 124.42 751.93 C 139.01 770.60, 147.66 780.28, 165.16 797.52 C 179.80 811.94, 186.39 817.82, 197.11 826.07 C 216.12 840.69, 224.56 846.65, 236.07 853.57 C 245.10 859.00, 265.88 869.74, 278.94 875.73 C 301.14 885.92, 323.45 893.70, 343.56 898.26 C 374.59 905.30, 390.98 908.08, 409.85 909.49 C 421.63 910.37, 468.59 910.39, 477.15 909.52 C 494.61 907.74, 514.81 904.40, 532.60 900.36 C 540.09 898.66, 548.14 896.72, 550.50 896.07 C 564.64 892.10, 586.08 884.39, 598.33 878.84 C 602.94 876.76, 614.53 871.11, 624.10 866.29 C 636.58 860.00, 644.35 855.71, 651.61 851.09 C 663.36 843.61, 672.27 837.43, 680.92 830.75 C 684.31 828.14, 689.53 824.14, 692.52 821.87 C 695.51 819.59, 699.54 816.33, 701.48 814.62 C 709.40 807.63, 738.66 778.17, 743.74 772.06 C 751.50 762.75, 767.16 741.76, 773.67 731.98 C 782.13 719.25, 786.91 710.93, 795.23 694.42 C 805.45 674.17, 810.28 662.98, 816.15 646.03 C 822.69 627.11, 828.67 601.95, 833.53 572.93 C 837.16 551.18, 837.95 532.54, 836.85 494.54 C 836.40 479.00, 835.82 473.02, 833.03 454.97 C 831.35 444.09, 825.10 414.08, 822.93 406.49 C 820.12 396.63, 814.12 379.24, 809.21 366.75 C 803.58 352.41, 802.23 348.51, 802.70 348.04 C 803.29 347.44, 856.08 346.90, 917.12 346.87 L 973.96 346.83 973.96 312.98 L 973.96 279.13 882.08 279.46 C 831.55 279.64, 717.05 279.84, 627.63 279.90 C 538.21 279.96, 455.64 280.17, 444.13 280.35 C 422.57 280.69, 413.04 281.35, 401.53 283.32 C 393.05 284.76, 368.44 290.92, 361.20 293.41 C 344.30 299.22, 326.86 308.06, 308.77 319.98 C 298.66 326.65, 293.04 330.81, 286.04 336.81 C 263.15 356.44, 245.10 379.00, 230.22 406.57 C 227.82 411.01, 224.51 417.75, 222.86 421.56 C 219.22 429.96, 211.49 453.25, 209.03 463.29 C 206.94 471.78, 205.60 479.28, 204.35 489.50 C 203.64 495.25, 203.45 500.58, 203.46 514.45 C 203.47 524.47, 203.74 534.93, 204.09 538.65 C 205.97 558.46, 209.85 575.75, 217.45 598.16 C 221.05 608.78, 224.12 615.91, 229.47 626.10 C 233.82 634.39, 236.53 638.76, 243.40 648.55 C 254.69 664.65, 258.96 669.86, 269.43 680.33 C 284.19 695.09, 298.77 707.36, 309.41 713.97 C 314.82 717.33, 328.52 724.87, 336.00 728.59 C 346.66 733.90, 358.53 738.76, 369.28 742.22 C 381.36 746.11, 389.51 748.08, 401.78 750.07 C 417.23 752.57, 420.78 752.81, 442.11 752.83 C 460.45 752.85, 463.38 752.74, 470.85 751.74 C 494.55 748.55, 510.42 744.63, 528.82 737.42 C 543.81 731.55, 563.23 721.48, 576.95 712.46 C 590.65 703.45, 596.49 698.58, 612.43 682.85 C 624.75 670.70, 630.22 664.56, 636.26 656.11 C 643.90 645.43, 651.70 632.18, 657.91 619.31 C 665.80 603.00, 670.17 590.93, 674.50 573.48 C 677.46 561.58, 679.23 551.51, 680.11 541.68 C 680.49 537.44, 680.74 526.57, 680.73 514.45 C 680.72 491.81, 680.42 488.42, 677.02 471.35 C 673.75 455.01, 669.98 442.92, 663.06 426.62 C 659.01 417.06, 654.04 407.27, 647.54 395.99 C 639.28 381.64, 632.66 372.39, 624.29 363.47 C 619.21 358.05, 614.35 352.50, 612.33 349.80 L 610.97 347.97 613.88 347.66 C 615.48 347.49, 640.97 347.20, 670.53 347.02 L 724.27 346.68 726.80 351.17 C 734.32 364.52, 745.67 389.72, 751.61 406.27 C 754.92 415.50, 757.22 423.50, 759.92 435.23 C 764.38 454.55, 767.36 471.98, 768.77 486.98 C 769.07 490.17, 769.45 499.92, 769.62 508.66 C 770.07 532.22, 768.96 548.38, 765.45 569.40 C 762.65 586.12, 757.99 606.07, 754.11 617.93 C 751.00 627.42, 745.67 640.88, 741.19 650.57 C 737.22 659.16, 727.57 677.62, 723.05 685.28 C 718.93 692.25, 709.10 706.53, 703.07 714.29 C 694.72 725.05, 683.98 737.19, 674.04 747.13 C 660.57 760.60, 647.11 772.00, 631.30 783.32 C 621.34 790.44, 617.23 793.06, 606.20 799.29 C 585.00 811.28, 569.45 818.64, 552.38 824.77 C 542.33 828.38, 539.00 829.39, 527.81 832.24 C 514.64 835.60, 503.13 838.03, 491.95 839.83 C 476.02 842.39, 472.03 842.64, 445.64 842.63 C 426.05 842.63, 419.29 842.45, 411.61 841.73 C 393.23 839.99, 380.86 837.88, 360.45 832.98 C 339.81 828.02, 330.35 824.81, 311.24 816.25 C 297.60 810.14, 290.67 806.62, 277.52 799.14 C 260.40 789.39, 253.72 784.69, 232.40 767.37 C 224.70 761.11, 218.49 755.48, 210.96 747.92 C 199.65 736.56, 187.40 723.20, 182.24 716.61 C 177.91 711.07, 161.25 686.20, 156.92 678.80 C 152.57 671.38, 145.68 657.93, 142.59 650.82 C 139.48 643.70, 135.08 632.17, 131.81 622.62 C 124.52 601.31, 120.97 586.56, 116.64 559.57 L 114.82 548.23 114.58 527.81 C 114.32 507.01, 114.78 494.01, 116.19 481.69 C 119.02 457.00, 122.94 439.15, 130.53 416.40 C 142.00 382.00, 152.76 360.27, 172.84 330.96 C 182.30 317.16, 193.86 303.34, 208.45 288.41 C 218.17 278.46, 227.40 270.08, 238.28 261.31 C 249.16 252.55, 250.87 251.30, 260.88 244.92 C 288.15 227.52, 303.85 219.48, 325.96 211.56 C 339.99 206.54, 356.92 201.21, 366.07 198.92 C 370.13 197.91, 379.55 195.82, 386.99 194.28 L 400.52 191.49 665.94 191.27 C 811.92 191.15, 940.95 190.91, 952.66 190.74 L 973.96 190.44 973.96 156.66 L 973.96 122.88 787.56 123.07 C 685.04 123.17, 600.48 123.31, 599.65 123.37 M 420.18 348.62 C 405.34 350.59, 382.83 356.97, 371.01 362.56 C 357.12 369.14, 340.90 379.87, 327.43 391.39 C 315.44 401.65, 298.51 423.16, 290.69 438.08 C 285.34 448.30, 279.77 463.32, 276.21 477.18 C 274.85 482.47, 273.40 489.05, 272.98 491.80 C 271.25 503.13, 271.55 531.90, 273.51 543.33 C 275.37 554.13, 279.42 568.64, 283.67 579.74 C 288.08 591.24, 293.96 602.34, 300.90 612.25 C 307.47 621.64, 320.75 636.45, 329.18 643.79 C 334.36 648.30, 346.03 656.48, 355.35 662.13 C 364.41 667.62, 377.83 673.83, 388.42 677.43 C 403.24 682.46, 419.22 685.24, 437.07 685.89 C 447.52 686.27, 464.03 685.49, 471.10 684.29 C 477.73 683.17, 485.70 681.01, 496.42 677.45 C 503.27 675.17, 508.46 673.02, 515.21 669.66 C 529.96 662.31, 543.10 653.95, 552.77 645.76 C 554.98 643.88, 560.78 638.29, 565.64 633.35 C 577.31 621.48, 584.10 612.40, 592.48 597.42 C 598.49 586.69, 602.76 576.66, 606.13 565.37 C 612.10 545.37, 614.04 529.07, 613.03 507.40 C 612.74 501.30, 612.16 494.17, 611.74 491.57 C 608.65 472.64, 604.22 459.62, 594.01 439.47 C 588.74 429.06, 581.62 417.86, 575.35 410.10 C 567.77 400.73, 551.43 385.69, 539.94 377.53 C 533.45 372.92, 522.50 366.39, 515.41 362.92 C 507.03 358.82, 493.16 354.30, 479.17 351.12 C 466.56 348.25, 461.83 347.84, 442.47 347.90 C 431.36 347.94, 423.43 348.19, 420.18 348.62"/>
+  </symbol>
+</svg>
+
+<div class="app">
+
+  <header class="topbar" role="banner">
+    <a class="brand" href="/" aria-label="Clearbot Team home">
+      <svg class="mark-logo" width="20" height="20" aria-hidden="true"><use href="#clearbot-logo"/></svg>
+      <span class="brand-name">Clearbot<em>/team</em></span>
+    </a>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <span>Team</span><span class="sep">/</span><span class="here" data-crumb>Home</span>
+    </nav>
+    <button class="user" data-signout type="button" aria-label="Sign out">
+      <span class="name" data-user-name>&hellip;</span>
+      <span class="avatar" data-user-initial aria-hidden="true">&bull;</span>
+    </button>
+  </header>
+
+  <aside class="sidebar" aria-label="Team navigation">
+    <button class="nav-item" type="button" data-view="home">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
+      Home
+    </button>
+    <button class="nav-item" type="button" data-view="users">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M17 11l2 2 4-4"/><path d="M3 21v-1a6 6 0 0 1 12 0v1"/></svg>
+      Clients
+    </button>
+    <button class="nav-item" type="button" data-view="projects-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
+      Projects
+    </button>
+    <button class="nav-item" type="button" data-view="invoices-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+      Invoices
+    </button>
+    <button class="nav-item" type="button" data-view="deliverables-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5"/></svg>
+      Deliverables
+    </button>
+    <button class="nav-item" type="button" data-view="activity-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+      Activity
+    </button>
+    <div class="sidebar-group">Account</div>
+    <button class="nav-item" type="button" data-signout>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      Sign Out
+    </button>
+    <div class="spacer"></div>
+    <div class="foot"><a href="https://clearbot.io">&larr; Main Site</a></div>
+  </aside>
+
+  <main class="main">
+
+    <!-- HOME -->
+    <section class="view-pane" data-view-pane="home">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow" data-today>Command center</div>
+          <h1>Good <em data-daypart>day</em>, <em data-team-name>team</em>.</h1>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn" data-view-link="users">Browse clients</button>
+        </div>
+      </div>
+      <div class="tiles">
+        <div class="tile" data-tile="total-users">
+          <div class="label">Clients</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="active-projects">
+          <div class="label">Active Projects</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="outstanding">
+          <div class="label">Outstanding</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="activity-7d">
+          <div class="label">Activity &middot; 7d</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <section class="panel bracketed">
+          <div class="panel-head">
+            <h2>Recent Activity</h2>
+            <button type="button" class="action" data-view-link="activity-all">View all &rarr;</button>
+          </div>
+          <div class="feed" data-home-activity></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Top Outstanding</h2>
+            <button type="button" class="action" data-view-link="invoices-all">All &rarr;</button>
+          </div>
+          <div class="proj-list" data-home-top-outstanding></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- USERS -->
+    <section class="view-pane" data-view-pane="users" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Roster</div>
+          <h1>Clients <em>directory</em>.</h1>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input class="input" id="user-search" type="search" placeholder="Search email, company, domain, name&hellip;" autocomplete="off" />
+        <span class="count" data-users-count>&mdash;</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Domain</th>
+              <th>Role</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody data-users-tbody></tbody>
+        </table>
+      </div>
+      <div data-users-empty></div>
+    </section>
+
+    <!-- USER DETAIL -->
+    <section class="view-pane" data-view-pane="user-detail" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow" data-user-eyebrow>Client</div>
+          <h1 data-user-title>&hellip;</h1>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-ghost" data-view-link="users">&larr; Back</button>
+          <button type="button" class="btn" data-action="new-deliverable">+ Deliverable</button>
+          <button type="button" class="btn" data-action="new-invoice">+ Invoice</button>
+          <button type="button" class="btn btn-primary" data-action="new-project">+ Project</button>
+        </div>
+      </div>
+      <div class="subtabs" role="tablist">
+        <button class="subtab" role="tab" data-subtab="profile">Profile</button>
+        <button class="subtab" role="tab" data-subtab="projects">Projects</button>
+        <button class="subtab" role="tab" data-subtab="invoices">Invoices</button>
+        <button class="subtab" role="tab" data-subtab="deliverables">Deliverables</button>
+        <button class="subtab" role="tab" data-subtab="activity">Activity</button>
+        <button class="subtab" role="tab" data-subtab="messages">Messages</button>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="profile">
+        <section class="panel">
+          <div class="form-row">
+            <label class="form-label" for="det-company">Company</label>
+            <div><input class="input" id="det-company" type="text" autocomplete="off" /></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="det-domain">Primary domain</label>
+            <div><input class="input" id="det-domain" type="text" autocomplete="off" placeholder="example.com" /></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="det-tz">Timezone</label>
+            <div><input class="input" id="det-tz" type="text" autocomplete="off" placeholder="America/New_York" /></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Name</label>
+            <div class="form-grid">
+              <input class="input" id="det-first" type="text" placeholder="First" autocomplete="off" />
+              <input class="input" id="det-last" type="text" placeholder="Last" autocomplete="off" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="det-email">Email</label>
+            <div><input class="input" id="det-email" type="email" autocomplete="off" /></div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="det-role">Role</label>
+            <div>
+              <select class="select" id="det-role">
+                <option value="">(none)</option>
+                <option value="client">client</option>
+                <option value="team">team</option>
+                <option value="admin">admin</option>
+              </select>
+              <span class="form-help">Set to <strong>admin</strong> or <strong>team</strong> to let this user query others' rows via RLS.</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <span class="form-label">Notifications</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 18px;">
+              <label class="toggle"><input type="checkbox" id="det-notif-deliverables" />Deliverables</label>
+              <label class="toggle"><input type="checkbox" id="det-notif-messages" />Messages</label>
+              <label class="toggle"><input type="checkbox" id="det-notif-invoices" />Invoices</label>
+              <label class="toggle"><input type="checkbox" id="det-notif-digest" />Digest</label>
+              <label class="toggle"><input type="checkbox" id="det-notif-slack" />Slack</label>
+            </div>
+          </div>
+          <div style="display: flex; gap: 14px; align-items: center; margin-top: 22px;">
+            <button type="button" class="btn btn-primary" data-save-profile>Save profile</button>
+            <span class="save-msg" data-save-msg></span>
+          </div>
+        </section>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="projects" hidden>
+        <div class="section-head">
+          <h2>Projects</h2>
+          <button type="button" class="btn btn-sm" data-action="new-project">+ New project</button>
+        </div>
+        <div class="table-wrap" data-projects-wrap>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Next Milestone</th>
+                <th>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody data-projects-tbody></tbody>
+          </table>
+        </div>
+        <div data-projects-empty></div>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="invoices" hidden>
+        <div class="section-head">
+          <h2>Invoices</h2>
+          <button type="button" class="btn btn-sm" data-action="new-invoice">+ New invoice</button>
+        </div>
+        <div class="table-wrap" data-invoices-wrap>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Number</th>
+                <th>Project</th>
+                <th>Amount</th>
+                <th>Issued</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody data-invoices-tbody></tbody>
+          </table>
+        </div>
+        <div data-invoices-empty></div>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="deliverables" hidden>
+        <div class="section-head">
+          <h2>Deliverables</h2>
+          <button type="button" class="btn btn-sm" data-action="new-deliverable">+ New deliverable</button>
+        </div>
+        <div data-deliverables-root></div>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="activity" hidden>
+        <section class="panel">
+          <div class="section-head">
+            <h2 style="font-size: 14px;">Post update</h2>
+          </div>
+          <textarea class="textarea" id="activity-text" rows="3" placeholder="Post an activity note to this client&rsquo;s feed&hellip;"></textarea>
+          <div style="display: flex; gap: 14px; align-items: center; margin-top: 12px;">
+            <select class="select" id="activity-project" style="max-width: 300px;">
+              <option value="">&mdash; No project &mdash;</option>
+            </select>
+            <button type="button" class="btn btn-primary" data-post-activity>Post</button>
+          </div>
+        </section>
+        <section class="panel bracketed" style="margin-top: 24px;">
+          <div class="panel-head"><h2>Activity feed</h2></div>
+          <div class="feed" data-activity-feed></div>
+        </section>
+      </div>
+
+      <div class="detail-pane" data-detail-pane="messages" hidden>
+        <div class="msg-shell">
+          <div class="msg-list">
+            <div class="msg-threads" data-threads></div>
+          </div>
+          <div class="msg-pane" data-thread-pane></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROJECTS ALL -->
+    <section class="view-pane" data-view-pane="projects-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">All clients</div>
+          <h1>Projects <em>aggregate</em>.</h1>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Client</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody data-projects-all-tbody></tbody>
+        </table>
+      </div>
+      <div data-projects-all-empty></div>
+    </section>
+
+    <!-- INVOICES ALL -->
+    <section class="view-pane" data-view-pane="invoices-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">All clients</div>
+          <h1>Invoices <em>ledger</em>.</h1>
+        </div>
+      </div>
+      <div class="tiles" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="tile" data-tile="inv-outstanding">
+          <div class="label">Outstanding</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="inv-paid-ytd">
+          <div class="label">Paid YTD</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="inv-overdue">
+          <div class="label">Overdue</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Number</th>
+              <th>Client</th>
+              <th>Project</th>
+              <th>Amount</th>
+              <th>Due</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody data-invoices-all-tbody></tbody>
+        </table>
+      </div>
+      <div data-invoices-all-empty></div>
+    </section>
+
+    <!-- DELIVERABLES ALL -->
+    <section class="view-pane" data-view-pane="deliverables-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">All clients</div>
+          <h1>Deliverables <em>library</em>.</h1>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Client</th>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Version</th>
+              <th>Updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody data-deliverables-all-tbody></tbody>
+        </table>
+      </div>
+      <div data-deliverables-all-empty></div>
+    </section>
+
+    <!-- ACTIVITY ALL -->
+    <section class="view-pane" data-view-pane="activity-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">All clients</div>
+          <h1>Activity <em>stream</em>.</h1>
+        </div>
+      </div>
+      <section class="panel bracketed">
+        <div class="feed" data-activity-all></div>
+      </section>
+    </section>
+
+    <!-- UNAUTHORIZED -->
+    <section class="view-pane" data-view-pane="unauthorized" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Access</div>
+          <h1>Not <em>authorized</em>.</h1>
+        </div>
+      </div>
+      <section class="panel bracketed">
+        <div class="empty">
+          <div class="headline">Your email is not on the team allowlist.</div>
+          <p>Sign in with an approved team account, or ask an admin to add your email to the <code>TEAM_EMAILS</code> constant in <code>index.html</code>.</p>
+          <div style="margin-top: 18px;">
+            <button type="button" class="btn" data-signout>Sign out</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+  </main>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { jsPDF } from 'https://esm.sh/jspdf@2.5.1';
+
+// ============================================================================
+// Config
+// ============================================================================
+const SUPABASE_URL      = 'https://qunobrixpnerocdntkio.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_P-w2YUP5j2PcUPJrqZ3Xxg_Wk0BqSRu';
+const LOGIN_URL         = 'https://login.clearbot.io';
+const RETURN_URL        = 'https://team.clearbot.io';
+const COOKIE_DOMAIN     = '.clearbot.io';
+const MAX_COOKIE_CHARS  = 3500;
+
+// Hardcoded allowlist. Edit this list to grant access to more teammates.
+const TEAM_EMAILS = ['ethan@clearbot.io'];
+
+// ============================================================================
+// Cross-domain cookie storage (verbatim from client/js/supabase.js)
+// ============================================================================
+function writeCookie(name, value) {
+  document.cookie =
+    encodeURIComponent(name) + '=' + encodeURIComponent(value) +
+    '; Domain=' + COOKIE_DOMAIN +
+    '; Path=/; Max-Age=31536000; Secure; SameSite=Lax';
+}
+function deleteCookie(name) {
+  document.cookie =
+    encodeURIComponent(name) + '=' +
+    '; Domain=' + COOKIE_DOMAIN +
+    '; Path=/; Max-Age=0; Secure; SameSite=Lax';
+}
+function readCookie(name) {
+  const target = encodeURIComponent(name);
+  const parts = document.cookie ? document.cookie.split('; ') : [];
+  for (const p of parts) {
+    const eq = p.indexOf('=');
+    if (eq < 0) continue;
+    if (p.slice(0, eq) === target) return decodeURIComponent(p.slice(eq + 1));
+  }
+  return null;
+}
+function allCookieNames() {
+  const parts = document.cookie ? document.cookie.split('; ') : [];
+  const names = [];
+  for (const p of parts) {
+    const eq = p.indexOf('=');
+    if (eq < 0) continue;
+    try { names.push(decodeURIComponent(p.slice(0, eq))); }
+    catch (_) { names.push(p.slice(0, eq)); }
+  }
+  return names;
+}
+const crossDomainCookieStorage = {
+  getItem(key) {
+    if (readCookie(key + '.0') != null) {
+      let result = ''; let i = 0; let chunk;
+      while ((chunk = readCookie(key + '.' + i)) != null) { result += chunk; i++; }
+      return result;
+    }
+    return readCookie(key);
+  },
+  setItem(key, value) {
+    this.removeItem(key);
+    const s = String(value);
+    if (s.length <= MAX_COOKIE_CHARS) { writeCookie(key, s); return; }
+    let i = 0;
+    for (let off = 0; off < s.length; off += MAX_COOKIE_CHARS) {
+      writeCookie(key + '.' + i, s.slice(off, off + MAX_COOKIE_CHARS));
+      i++;
+    }
+  },
+  removeItem(key) {
+    deleteCookie(key);
+    for (const n of allCookieNames()) {
+      if (n.startsWith(key + '.')) deleteCookie(n);
+    }
+  },
+};
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+    storage: crossDomainCookieStorage,
+  },
+});
+
+// ============================================================================
+// DOM + format helpers
+// ============================================================================
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+function fmtRelTime(iso) {
+  if (!iso) return '—';
+  const ts = new Date(iso).getTime();
+  if (isNaN(ts)) return '—';
+  const diff = Math.max(0, (Date.now() - ts) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+  return new Date(iso).toLocaleDateString();
+}
+function fmtMoney(cents) {
+  const amt = (cents || 0) / 100;
+  return amt.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+function fmtShortDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function fmtDateInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return yyyy + '-' + mm + '-' + dd;
+}
+function todayIso() {
+  const d = new Date();
+  return fmtDateInput(d.toISOString());
+}
+function daysFromNow(n) {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return fmtDateInput(d.toISOString());
+}
+function emptyState(title, desc) {
+  return '<div class="empty"><div class="headline">' + escapeHtml(title) + '</div><p>' + escapeHtml(desc) + '</p></div>';
+}
+function statusBadge(status) {
+  const s = (status || '').toLowerCase().replace(/\s+/g, '_');
+  const map = {
+    in_review: ['accent', 'In Review'],
+    review: ['accent', 'In Review'],
+    needs_review: ['accent', 'Needs Review'],
+    in_progress: ['', 'In Progress'],
+    progress: ['', 'In Progress'],
+    discovery: ['warn', 'Discovery'],
+    shipped: ['ok', 'Shipped'],
+    done: ['ok', 'Shipped'],
+    approved: ['ok', 'Approved'],
+    paid: ['ok', 'Paid'],
+    due: ['warn', 'Due'],
+    overdue: ['bad', 'Overdue'],
+    archived: ['', 'Archived'],
+    active: ['', 'Active'],
+  };
+  const hit = map[s] || ['', (status || 'Pending').toString()];
+  return '<span class="badge ' + hit[0] + '"><span class="dot"></span>' + escapeHtml(hit[1]) + '</span>';
+}
+function userDisplayName(profile, fallbackEmail) {
+  if (!profile && !fallbackEmail) return 'Unknown';
+  if (profile) {
+    if (profile.company_name) return profile.company_name;
+    const first = (profile.first_name || '').trim();
+    const last = (profile.last_name || '').trim();
+    if (first || last) return (first + ' ' + last).trim();
+    if (profile.email) return profile.email;
+  }
+  return fallbackEmail || 'Unknown';
+}
+function userInitial(profile, fallbackEmail) {
+  const name = userDisplayName(profile, fallbackEmail);
+  const ch = (name || '?').trim().charAt(0);
+  return (ch || '?').toUpperCase();
+}
+
+// ============================================================================
+// Toast
+// ============================================================================
+function toast(message, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || 'ok');
+  el.textContent = message;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  }, 2500);
+}
+
+// ============================================================================
+// Modal (adapted from client/js/app.js)
+// ============================================================================
+let activeModalCleanup = null;
+function openModal(opts) {
+  const {
+    eyebrow, title, bodyHtml = '',
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
+    confirmVariant = 'primary',
+    onConfirm, onCancel, initialFocus,
+  } = opts;
+  if (activeModalCleanup) activeModalCleanup();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML =
+    '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+      '<button class="modal-close" type="button" aria-label="Close" data-modal-close>' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12"/></svg>' +
+      '</button>' +
+      '<div class="modal-head">' +
+        (eyebrow ? '<div class="modal-eyebrow">' + escapeHtml(eyebrow) + '</div>' : '') +
+        '<h2 class="modal-title" id="modal-title">' + (title || '') + '</h2>' +
+      '</div>' +
+      '<div class="modal-body">' + bodyHtml + '</div>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn btn-ghost" data-modal-cancel>' + escapeHtml(cancelLabel) + '</button>' +
+        '<button type="button" class="btn btn-' + (confirmVariant === 'danger' ? 'danger' : 'primary') + '" data-modal-confirm>' + escapeHtml(confirmLabel) + '</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(backdrop);
+  const prevOverflow = document.documentElement.style.overflow;
+  document.documentElement.style.overflow = 'hidden';
+  const previouslyFocused = document.activeElement;
+  requestAnimationFrame(() => {
+    backdrop.classList.add('is-open');
+    const focusTarget = initialFocus
+      ? backdrop.querySelector(initialFocus)
+      : backdrop.querySelector('[data-modal-confirm]');
+    if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+  });
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    backdrop.classList.remove('is-open');
+    document.removeEventListener('keydown', onKey);
+    setTimeout(() => {
+      backdrop.remove();
+      document.documentElement.style.overflow = prevOverflow;
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        try { previouslyFocused.focus(); } catch (_) {}
+      }
+      if (activeModalCleanup === close) activeModalCleanup = null;
+    }, 200);
+  };
+  activeModalCleanup = close;
+  const doCancel = () => { if (onCancel) onCancel(backdrop); close(); };
+  const doConfirm = async () => {
+    if (onConfirm) {
+      try {
+        const result = await onConfirm(backdrop);
+        if (result === false) return;
+      } catch (e) { console.error('[team] modal onConfirm error:', e); return; }
+    }
+    close();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
+    else if (e.key === 'Enter' && !e.shiftKey &&
+             !(e.target instanceof HTMLTextAreaElement) &&
+             !(e.target instanceof HTMLButtonElement) &&
+             !(e.target instanceof HTMLSelectElement)) {
+      e.preventDefault(); doConfirm();
+    }
+  };
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) doCancel(); });
+  backdrop.querySelector('[data-modal-close]').addEventListener('click', doCancel);
+  backdrop.querySelector('[data-modal-cancel]').addEventListener('click', doCancel);
+  backdrop.querySelector('[data-modal-confirm]').addEventListener('click', doConfirm);
+  document.addEventListener('keydown', onKey);
+  return { root: backdrop, close };
+}
+function setModalError(root, message) {
+  const el = root.querySelector('[data-modal-error]');
+  if (!el) return;
+  if (message) { el.textContent = message; el.hidden = false; }
+  else { el.textContent = ''; el.hidden = true; }
+}
+function setModalBusy(root, busy, busyLabel) {
+  const btn = root.querySelector('[data-modal-confirm]');
+  const cancel = root.querySelector('[data-modal-cancel]');
+  if (!btn) return;
+  if (busy) {
+    btn.dataset.prevLabel = btn.textContent;
+    btn.setAttribute('disabled', 'true');
+    if (cancel) cancel.setAttribute('disabled', 'true');
+    if (busyLabel) btn.textContent = busyLabel;
+  } else {
+    btn.removeAttribute('disabled');
+    if (cancel) cancel.removeAttribute('disabled');
+    if (btn.dataset.prevLabel) { btn.textContent = btn.dataset.prevLabel; delete btn.dataset.prevLabel; }
+  }
+}
+
+// ============================================================================
+// Data access (safeList / safeOne wrappers)
+// ============================================================================
+async function safeList(fn) {
+  try {
+    const result = await fn();
+    if (result.error) {
+      if (!/does not exist|relation .* does not exist|schema cache/i.test(result.error.message || '')) {
+        console.warn('[team]', result.error.message);
+      }
+      return [];
+    }
+    return result.data || [];
+  } catch (e) { console.warn('[team] query error:', e); return []; }
+}
+async function safeOne(fn) {
+  try {
+    const result = await fn();
+    if (result.error) return null;
+    return result.data || null;
+  } catch (_) { return null; }
+}
+async function safeWrite(fn) {
+  try {
+    const result = await fn();
+    if (result.error) return { ok: false, error: result.error.message };
+    return { ok: true, data: result.data };
+  } catch (e) { return { ok: false, error: (e && e.message) || 'Unknown error' }; }
+}
+
+function listUsers(query) {
+  return safeList(() => {
+    let q = supabase.from('profiles')
+      .select('user_id, company_name, primary_domain, first_name, last_name, email, role, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(200);
+    const term = (query || '').replace(/[,()]/g, ' ').trim();
+    if (term) {
+      const pat = '%' + term + '%';
+      q = q.or(
+        'email.ilike.' + pat +
+        ',company_name.ilike.' + pat +
+        ',primary_domain.ilike.' + pat +
+        ',first_name.ilike.' + pat +
+        ',last_name.ilike.' + pat
+      );
+    }
+    return q;
+  });
+}
+async function getUserBundle(userId) {
+  const [profile, projects, invoices, deliverables, activity, threads] = await Promise.all([
+    safeOne(() => supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()),
+    safeList(() => supabase.from('projects').select('*').eq('user_id', userId).order('updated_at', { ascending: false })),
+    safeList(() => supabase.from('invoices').select('*').eq('user_id', userId).order('issued_at', { ascending: false })),
+    safeList(() => supabase.from('deliverables').select('*').eq('user_id', userId).order('updated_at', { ascending: false })),
+    safeList(() => supabase.from('activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50)),
+    safeList(() => supabase.from('message_threads').select('*').eq('user_id', userId).order('updated_at', { ascending: false })),
+  ]);
+  return { profile, projects, invoices, deliverables, activity, threads };
+}
+function upsertProfile(userId, patch) {
+  return safeWrite(() =>
+    supabase.from('profiles').upsert(
+      { user_id: userId, ...patch, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    )
+  );
+}
+function createProject(userId, fields) {
+  return safeWrite(() =>
+    supabase.from('projects').insert({
+      user_id: userId, status: 'discovery', progress: 0,
+      ...fields, updated_at: new Date().toISOString(),
+    })
+  );
+}
+function updateProject(id, patch) {
+  return safeWrite(() =>
+    supabase.from('projects').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  );
+}
+function deleteProject(id) {
+  return safeWrite(() => supabase.from('projects').delete().eq('id', id));
+}
+function createInvoice(userId, fields) {
+  return safeWrite(() =>
+    supabase.from('invoices').insert({ user_id: userId, ...fields })
+  );
+}
+function updateInvoice(id, patch) {
+  return safeWrite(() => supabase.from('invoices').update(patch).eq('id', id));
+}
+function markInvoicePaid(id) {
+  return safeWrite(() =>
+    supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id)
+  );
+}
+function deleteInvoice(id) {
+  return safeWrite(() => supabase.from('invoices').delete().eq('id', id));
+}
+function createDeliverable(userId, fields) {
+  return safeWrite(() =>
+    supabase.from('deliverables').insert({
+      user_id: userId, ...fields, updated_at: new Date().toISOString(),
+    })
+  );
+}
+function updateDeliverable(id, patch) {
+  return safeWrite(() =>
+    supabase.from('deliverables').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  );
+}
+function deleteDeliverable(id) {
+  return safeWrite(() => supabase.from('deliverables').delete().eq('id', id));
+}
+function postActivity(userId, text, projectId, projectName) {
+  return safeWrite(() =>
+    supabase.from('activity').insert({
+      user_id: userId, text,
+      project_id: projectId || null,
+      project_name: projectName || null,
+      unread: true,
+    })
+  );
+}
+async function dashboardStats() {
+  const [profilesCount, profiles, projects, invoices, activity] = await Promise.all([
+    (async () => {
+      try {
+        const r = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+        return r.count || 0;
+      } catch (_) { return 0; }
+    })(),
+    safeList(() => supabase.from('profiles').select('user_id, company_name, email, first_name, last_name')),
+    safeList(() => supabase.from('projects').select('id, user_id, name, status, progress, updated_at')),
+    safeList(() => supabase.from('invoices').select('id, user_id, project_name, amount_cents, status, due_at, issued_at, paid_at')),
+    safeList(() => supabase.from('activity').select('id, user_id, text, project_name, unread, created_at').order('created_at', { ascending: false }).limit(30)),
+  ]);
+  return { profilesCount, profiles, projects, invoices, activity };
+}
+
+// ============================================================================
+// App state
+// ============================================================================
+const state = {
+  currentUser: null,
+  currentProfile: null,
+  selectedUserId: null,
+  selectedBundle: null,
+  allProfilesCache: [],
+  currentView: 'home',
+  currentSubtab: 'profile',
+};
+
+// ============================================================================
+// View switcher
+// ============================================================================
+const VIEW_TITLES = {
+  'home': 'Home',
+  'users': 'Clients',
+  'user-detail': 'Client',
+  'projects-all': 'Projects',
+  'invoices-all': 'Invoices',
+  'deliverables-all': 'Deliverables',
+  'activity-all': 'Activity',
+  'unauthorized': 'Access',
+};
+
+async function showView(name) {
+  state.currentView = name;
+  $$('[data-view-pane]').forEach(el => {
+    el.hidden = el.getAttribute('data-view-pane') !== name;
+  });
+  $$('[data-view]').forEach(el => {
+    if (el.getAttribute('data-view') === name) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  });
+  const crumb = $('[data-crumb]');
+  if (crumb) crumb.textContent = VIEW_TITLES[name] || name;
+
+  try {
+    if (name === 'home')                   await renderHome();
+    else if (name === 'users')             await renderUsers($('#user-search').value);
+    else if (name === 'user-detail')       await renderUserDetail();
+    else if (name === 'projects-all')      await renderProjectsAll();
+    else if (name === 'invoices-all')      await renderInvoicesAll();
+    else if (name === 'deliverables-all')  await renderDeliverablesAll();
+    else if (name === 'activity-all')      await renderActivityAll();
+  } catch (e) { console.error('[team] render failed for', name, e); }
+}
+
+function showSubtab(name) {
+  state.currentSubtab = name;
+  $$('.subtab').forEach(el => {
+    if (el.getAttribute('data-subtab') === name) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  });
+  $$('[data-detail-pane]').forEach(el => {
+    el.hidden = el.getAttribute('data-detail-pane') !== name;
+  });
+}
+
+// ============================================================================
+// Renderers — Home
+// ============================================================================
+function greetingPart() {
+  const h = new Date().getHours();
+  if (h < 12) return 'morning';
+  if (h < 18) return 'afternoon';
+  return 'evening';
+}
+function setTile(key, value, delta) {
+  const tile = document.querySelector('[data-tile="' + key + '"]');
+  if (!tile) return;
+  const v = tile.querySelector('.val');
+  const d = tile.querySelector('.delta');
+  if (v) v.innerHTML = value;
+  if (d) d.textContent = delta || '';
+}
+async function renderHome() {
+  const today = $('[data-today]');
+  if (today) today.textContent = 'Command center · ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const daypart = $('[data-daypart]');
+  if (daypart) daypart.textContent = greetingPart();
+  const teamName = $('[data-team-name]');
+  if (teamName) teamName.textContent = (state.currentProfile && state.currentProfile.first_name) || (state.currentUser && state.currentUser.email ? state.currentUser.email.split('@')[0] : 'team');
+
+  const { profilesCount, profiles, projects, invoices, activity } = await dashboardStats();
+  state.allProfilesCache = profiles;
+
+  const active = projects.filter(p => !['shipped', 'done', 'archived'].includes((p.status || '').toLowerCase())).length;
+  const openInv = invoices.filter(i => (i.status || '').toLowerCase() !== 'paid');
+  const outstanding = openInv.reduce((s, i) => s + (i.amount_cents || 0), 0);
+  const weekAgo = Date.now() - 7 * 86400000;
+  const recent7 = activity.filter(a => a.created_at && new Date(a.created_at).getTime() >= weekAgo).length;
+
+  setTile('total-users', profilesCount || profiles.length, profiles.length + ' profiles');
+  setTile('active-projects', active, projects.length + ' total');
+  setTile('outstanding', openInv.length ? fmtMoney(outstanding) : '$0<small>.00</small>', openInv.length + (openInv.length === 1 ? ' open' : ' open'));
+  setTile('activity-7d', recent7, 'notes this week');
+
+  const feedRoot = $('[data-home-activity]');
+  if (feedRoot) {
+    if (!activity.length) {
+      feedRoot.innerHTML = emptyState('Nothing yet', 'Activity posted against any client will appear here.');
+    } else {
+      feedRoot.innerHTML = activity.slice(0, 15).map(a => {
+        const p = profiles.find(pp => pp.user_id === a.user_id);
+        const who = userDisplayName(p);
+        return '<div class="feed-item' + (a.unread ? ' new' : '') + '">' +
+          '<span class="feed-dot" aria-hidden="true"></span>' +
+          '<div class="feed-text">' +
+            '<span class="who">' + escapeHtml(who) + (a.project_name ? ' · ' + escapeHtml(a.project_name) : '') + '</span>' +
+            escapeHtml(a.text || '') +
+          '</div>' +
+          '<div class="feed-time">' + fmtRelTime(a.created_at) + '</div>' +
+        '</div>';
+      }).join('');
+    }
+  }
+
+  const outRoot = $('[data-home-top-outstanding]');
+  if (outRoot) {
+    const sumsByUser = {};
+    for (const i of openInv) {
+      const id = i.user_id;
+      sumsByUser[id] = (sumsByUser[id] || 0) + (i.amount_cents || 0);
+    }
+    const top = Object.entries(sumsByUser)
+      .map(([uid, cents]) => ({ uid, cents, profile: profiles.find(p => p.user_id === uid) }))
+      .sort((a, b) => b.cents - a.cents)
+      .slice(0, 5);
+    if (!top.length) {
+      outRoot.innerHTML = emptyState('All clear', 'No open invoices right now.');
+    } else {
+      outRoot.innerHTML = top.map(t =>
+        '<button class="proj-card" type="button" data-open-user="' + escapeHtml(t.uid) + '">' +
+          '<div class="proj-card-head">' +
+            '<span class="proj-card-name">' + escapeHtml(userDisplayName(t.profile)) + '</span>' +
+            '<span class="mono">' + fmtMoney(t.cents) + '</span>' +
+          '</div>' +
+        '</button>'
+      ).join('');
+      outRoot.querySelectorAll('[data-open-user]').forEach(el => {
+        el.addEventListener('click', () => openUser(el.getAttribute('data-open-user')));
+      });
+    }
+  }
+}
+
+// ============================================================================
+// Renderers — Users list
+// ============================================================================
+async function renderUsers(query) {
+  const tbody = $('[data-users-tbody]');
+  const countEl = $('[data-users-count]');
+  const emptyRoot = $('[data-users-empty]');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--ink-dim);">Loading…</td></tr>';
+  const rows = await listUsers(query);
+  if (countEl) countEl.textContent = rows.length + (rows.length === 1 ? ' match' : ' matches');
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    if (emptyRoot) emptyRoot.innerHTML = emptyState(
+      query ? 'No matches' : 'No clients yet',
+      query ? 'Try a shorter query or a different field.' : 'When clients sign up at clearbot.io, they\'ll appear here. If this looks empty but you expect data, check the RLS policies documented at the top of index.html.'
+    );
+    return;
+  }
+  if (emptyRoot) emptyRoot.innerHTML = '';
+  tbody.innerHTML = rows.map(p => {
+    const fullName = [(p.first_name || '').trim(), (p.last_name || '').trim()].filter(Boolean).join(' ') || '—';
+    return '<tr class="is-clickable" data-open-user="' + escapeHtml(p.user_id) + '">' +
+      '<td><div class="proj-name">' + escapeHtml(p.company_name || '—') + '</div></td>' +
+      '<td>' + escapeHtml(fullName) + '</td>' +
+      '<td class="mono">' + escapeHtml(p.email || '—') + '</td>' +
+      '<td class="mono">' + escapeHtml(p.primary_domain || '—') + '</td>' +
+      '<td>' + (p.role ? statusBadge(p.role) : '<span class="mono">—</span>') + '</td>' +
+      '<td class="mono">' + (p.updated_at ? fmtRelTime(p.updated_at) : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+  tbody.querySelectorAll('[data-open-user]').forEach(tr => {
+    tr.addEventListener('click', () => openUser(tr.getAttribute('data-open-user')));
+  });
+}
+
+// ============================================================================
+// Renderers — User detail
+// ============================================================================
+async function openUser(userId) {
+  state.selectedUserId = userId;
+  await showView('user-detail');
+}
+
+async function renderUserDetail() {
+  if (!state.selectedUserId) return;
+  const bundle = await getUserBundle(state.selectedUserId);
+  state.selectedBundle = bundle;
+  const { profile } = bundle;
+  const titleEl = $('[data-user-title]');
+  const eyeEl   = $('[data-user-eyebrow]');
+  const displayName = userDisplayName(profile);
+  if (titleEl) titleEl.innerHTML = escapeHtml(displayName) +
+    (profile && profile.primary_domain ? ' <em>@' + escapeHtml(profile.primary_domain) + '</em>' : '');
+  if (eyeEl) eyeEl.textContent = 'Client · ' + (profile && profile.email ? profile.email : state.selectedUserId);
+
+  fillProfileForm(profile || {});
+  renderUserProjects(bundle);
+  renderUserInvoices(bundle);
+  renderUserDeliverables(bundle);
+  renderUserActivity(bundle);
+  renderUserMessages(bundle);
+  populateActivityProjectSelect(bundle);
+  showSubtab(state.currentSubtab || 'profile');
+}
+
+function fillProfileForm(profile) {
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
+  const setCheck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+  setVal('det-company', profile.company_name);
+  setVal('det-domain',  profile.primary_domain);
+  setVal('det-tz',      profile.timezone);
+  setVal('det-first',   profile.first_name);
+  setVal('det-last',    profile.last_name);
+  setVal('det-email',   profile.email);
+  setVal('det-role',    profile.role || '');
+  setCheck('det-notif-deliverables', profile.notif_deliverables !== false);
+  setCheck('det-notif-messages',     profile.notif_messages !== false);
+  setCheck('det-notif-invoices',     profile.notif_invoices !== false);
+  setCheck('det-notif-digest',       !!profile.notif_digest);
+  setCheck('det-notif-slack',        !!profile.notif_slack);
+  const msg = $('[data-save-msg]'); if (msg) msg.textContent = '';
+}
+
+function renderUserProjects(bundle) {
+  const tbody = $('[data-projects-tbody]');
+  const wrap  = $('[data-projects-wrap]');
+  const empty = $('[data-projects-empty]');
+  if (!tbody) return;
+  const rows = bundle.projects || [];
+  if (!rows.length) {
+    if (wrap) wrap.hidden = true;
+    if (empty) empty.innerHTML = emptyState('No projects yet', 'Click “+ New project” to scope the first engagement for this client.');
+    tbody.innerHTML = '';
+    return;
+  }
+  if (wrap) wrap.hidden = false;
+  if (empty) empty.innerHTML = '';
+  tbody.innerHTML = rows.map(p =>
+    '<tr data-project-row="' + escapeHtml(p.id) + '">' +
+      '<td><div class="proj-name">' + escapeHtml(p.name || 'Untitled') + '</div>' +
+          (p.description ? '<div class="sub">' + escapeHtml(p.description) + '</div>' : '') +
+      '</td>' +
+      '<td>' + statusBadge(p.status) + '</td>' +
+      '<td style="min-width:160px;"><div style="display:flex;align-items:center;gap:10px;">' +
+        '<span class="progress"><span class="progress-bar" style="width:' + (p.progress || 0) + '%"></span></span>' +
+        '<span class="mono">' + (p.progress || 0) + '%</span>' +
+      '</div></td>' +
+      '<td class="mono">' + escapeHtml(p.next_milestone || '—') + '</td>' +
+      '<td class="mono">' + (p.updated_at ? fmtRelTime(p.updated_at) : '—') + '</td>' +
+      '<td><div class="row-actions">' +
+        '<button type="button" class="btn btn-sm" data-edit-project="' + escapeHtml(p.id) + '">Edit</button>' +
+        '<button type="button" class="btn btn-sm" data-delete-project="' + escapeHtml(p.id) + '">Delete</button>' +
+      '</div></td>' +
+    '</tr>'
+  ).join('');
+  tbody.querySelectorAll('[data-edit-project]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); showProjectModal(rows.find(r => r.id === btn.getAttribute('data-edit-project'))); });
+  });
+  tbody.querySelectorAll('[data-delete-project]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); confirmDeleteProject(rows.find(r => r.id === btn.getAttribute('data-delete-project'))); });
+  });
+}
+
+function renderUserInvoices(bundle) {
+  const tbody = $('[data-invoices-tbody]');
+  const wrap  = $('[data-invoices-wrap]');
+  const empty = $('[data-invoices-empty]');
+  if (!tbody) return;
+  const rows = bundle.invoices || [];
+  if (!rows.length) {
+    if (wrap) wrap.hidden = true;
+    if (empty) empty.innerHTML = emptyState('No invoices yet', 'Create the first invoice to bill this client. PDFs are generated on download.');
+    tbody.innerHTML = '';
+    return;
+  }
+  if (wrap) wrap.hidden = false;
+  if (empty) empty.innerHTML = '';
+  tbody.innerHTML = rows.map(i =>
+    '<tr>' +
+      '<td><div class="proj-name">' + escapeHtml(i.number || 'INV-' + i.id) + '</div></td>' +
+      '<td class="mono">' + escapeHtml(i.project_name || '—') + '</td>' +
+      '<td class="num">' + fmtMoney(i.amount_cents) + '</td>' +
+      '<td class="mono">' + fmtShortDate(i.issued_at) + '</td>' +
+      '<td class="mono">' + fmtShortDate(i.due_at) + '</td>' +
+      '<td>' + statusBadge(i.status) + '</td>' +
+      '<td><div class="row-actions">' +
+        '<button type="button" class="btn btn-sm" data-pdf-invoice="' + escapeHtml(i.id) + '">PDF</button>' +
+        ((i.status || '').toLowerCase() !== 'paid'
+          ? '<button type="button" class="btn btn-sm" data-paid-invoice="' + escapeHtml(i.id) + '">Mark Paid</button>'
+          : '') +
+        '<button type="button" class="btn btn-sm" data-edit-invoice="' + escapeHtml(i.id) + '">Edit</button>' +
+        '<button type="button" class="btn btn-sm" data-delete-invoice="' + escapeHtml(i.id) + '">Delete</button>' +
+      '</div></td>' +
+    '</tr>'
+  ).join('');
+  tbody.querySelectorAll('[data-pdf-invoice]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inv = rows.find(r => r.id === btn.getAttribute('data-pdf-invoice'));
+      if (inv) downloadInvoicePDF(inv, bundle.profile);
+    });
+  });
+  tbody.querySelectorAll('[data-paid-invoice]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.setAttribute('disabled', 'true');
+      const res = await markInvoicePaid(btn.getAttribute('data-paid-invoice'));
+      if (res.ok) { toast('Invoice marked paid'); await renderUserDetail(); }
+      else { toast('Error: ' + res.error, 'bad'); btn.removeAttribute('disabled'); }
+    });
+  });
+  tbody.querySelectorAll('[data-edit-invoice]').forEach(btn => {
+    btn.addEventListener('click', () => showInvoiceModal(rows.find(r => r.id === btn.getAttribute('data-edit-invoice'))));
+  });
+  tbody.querySelectorAll('[data-delete-invoice]').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteInvoice(rows.find(r => r.id === btn.getAttribute('data-delete-invoice'))));
+  });
+}
+
+function renderUserDeliverables(bundle) {
+  const root = $('[data-deliverables-root]');
+  if (!root) return;
+  const items = bundle.deliverables || [];
+  if (!items.length) {
+    root.innerHTML = emptyState('No deliverables yet', 'Add files, drafts, or shipped artifacts to this client.');
+    return;
+  }
+  const groups = {};
+  for (const d of items) {
+    const key = d.project_name || 'Unassigned';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(d);
+  }
+  root.innerHTML = Object.entries(groups).map(([proj, files]) =>
+    '<section class="section">' +
+      '<div class="section-head"><h2>' + escapeHtml(proj) + '</h2><span class="sub">' + files.length + (files.length === 1 ? ' file' : ' files') + '</span></div>' +
+      '<div class="files">' + files.map(f =>
+        '<div class="file">' +
+          '<span class="file-ico">' + escapeHtml((f.file_type || 'FILE').toString().toUpperCase().slice(0, 4)) + '</span>' +
+          '<div>' +
+            '<div class="file-name">' + escapeHtml(f.name || 'Untitled') + '</div>' +
+            '<div class="file-meta">' + (f.size_label ? escapeHtml(f.size_label) + ' · ' : '') + 'Updated ' + fmtRelTime(f.updated_at) + '</div>' +
+          '</div>' +
+          statusBadge(f.status) +
+          '<span class="mono">' + escapeHtml(f.version || '—') + '</span>' +
+          '<div class="row-actions">' +
+            (f.url ? '<a class="btn btn-sm" href="' + escapeHtml(f.url) + '" target="_blank" rel="noopener">Open</a>' : '') +
+            '<button type="button" class="btn btn-sm" data-edit-deliverable="' + escapeHtml(f.id) + '">Edit</button>' +
+            '<button type="button" class="btn btn-sm" data-delete-deliverable="' + escapeHtml(f.id) + '">Delete</button>' +
+          '</div>' +
+        '</div>'
+      ).join('') + '</div>' +
+    '</section>'
+  ).join('');
+  root.querySelectorAll('[data-edit-deliverable]').forEach(btn => {
+    btn.addEventListener('click', () => showDeliverableModal(items.find(r => r.id === btn.getAttribute('data-edit-deliverable'))));
+  });
+  root.querySelectorAll('[data-delete-deliverable]').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteDeliverable(items.find(r => r.id === btn.getAttribute('data-delete-deliverable'))));
+  });
+}
+
+function renderUserActivity(bundle) {
+  const root = $('[data-activity-feed]');
+  if (!root) return;
+  const items = bundle.activity || [];
+  if (!items.length) {
+    root.innerHTML = emptyState('No activity yet', 'Use the composer above to post the first note for this client.');
+    return;
+  }
+  root.innerHTML = items.map(a =>
+    '<div class="feed-item' + (a.unread ? ' new' : '') + '">' +
+      '<span class="feed-dot" aria-hidden="true"></span>' +
+      '<div class="feed-text">' +
+        (a.project_name ? '<span class="proj">' + escapeHtml(a.project_name) + '</span>' : '') +
+        escapeHtml(a.text || '') +
+      '</div>' +
+      '<div class="feed-time">' + fmtRelTime(a.created_at) + '</div>' +
+    '</div>'
+  ).join('');
+}
+
+function renderUserMessages(bundle) {
+  const list = $('[data-threads]');
+  const pane = $('[data-thread-pane]');
+  if (!list || !pane) return;
+  const threads = bundle.threads || [];
+  if (!threads.length) {
+    list.innerHTML = '<div style="padding:24px 16px;">' + emptyState('No threads', 'Client message threads appear here.') + '</div>';
+    pane.innerHTML = '<div class="msg-pane-body" style="align-items:center;justify-content:center;">' + emptyState('Read-only', 'Thread content isn\'t stored yet in the schema — only thread metadata.') + '</div>';
+    return;
+  }
+  list.innerHTML = threads.map((t, i) =>
+    '<a class="msg-thread' + (i === 0 ? ' active' : '') + '" href="#" data-thread-idx="' + i + '">' +
+      '<div class="title">' + escapeHtml(t.title || 'Thread') + ((t.unread_count || 0) > 0 ? ' <span class="unread-dot" aria-hidden="true"></span>' : '') + '</div>' +
+      '<div class="preview">' + escapeHtml(t.preview || '') + '</div>' +
+      '<div class="meta">' + escapeHtml(t.project_name || 'General') + ' · ' + fmtRelTime(t.updated_at) + '</div>' +
+    '</a>'
+  ).join('');
+  const renderPane = (idx) => {
+    const active = threads[idx];
+    pane.innerHTML =
+      '<div class="msg-pane-head">' +
+        '<div><div class="title">' + escapeHtml(active.title || 'Thread') + '</div>' +
+        '<div class="sub">' + escapeHtml(active.project_name || 'General') + '</div></div>' +
+        statusBadge(active.status || 'active') +
+      '</div>' +
+      '<div class="msg-pane-body">' + emptyState('Read-only', 'Message content is not persisted in the current schema.') + '</div>';
+  };
+  renderPane(0);
+  list.querySelectorAll('[data-thread-idx]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      list.querySelectorAll('.msg-thread').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      renderPane(Number(el.getAttribute('data-thread-idx')));
+    });
+  });
+}
+
+function populateActivityProjectSelect(bundle) {
+  const sel = $('#activity-project');
+  if (!sel) return;
+  const opts = ['<option value="">— No project —</option>'].concat(
+    (bundle.projects || []).map(p => '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name || 'Untitled') + '</option>')
+  );
+  sel.innerHTML = opts.join('');
+}
+
+// ============================================================================
+// Modals — Project / Invoice / Deliverable / Confirm
+// ============================================================================
+const PROJECT_STATUSES = ['discovery', 'in_progress', 'needs_review', 'in_review', 'shipped', 'archived'];
+function statusOptions(list, current) {
+  return list.map(s => '<option value="' + s + '"' + (s === (current || '') ? ' selected' : '') + '>' + s + '</option>').join('');
+}
+
+function showProjectModal(existing) {
+  if (!state.selectedUserId) return;
+  const isEdit = !!existing;
+  openModal({
+    eyebrow: isEdit ? 'Edit project' : 'New project',
+    title: isEdit ? 'Edit <em>project</em>.' : 'Brief a new <em>project</em>.',
+    bodyHtml:
+      '<div class="modal-field"><label class="form-label" for="p-name">Name</label>' +
+        '<input class="input" id="p-name" type="text" value="' + escapeHtml(existing ? (existing.name || '') : '') + '" /></div>' +
+      '<div class="modal-field"><label class="form-label" for="p-desc">Description</label>' +
+        '<textarea class="textarea" id="p-desc" rows="3">' + escapeHtml(existing ? (existing.description || '') : '') + '</textarea></div>' +
+      '<div class="form-grid">' +
+        '<div class="modal-field"><label class="form-label" for="p-status">Status</label>' +
+          '<select class="select" id="p-status">' + statusOptions(PROJECT_STATUSES, existing ? existing.status : 'discovery') + '</select></div>' +
+        '<div class="modal-field"><label class="form-label" for="p-progress">Progress %</label>' +
+          '<input class="input" id="p-progress" type="number" min="0" max="100" value="' + (existing ? (existing.progress || 0) : 0) + '" /></div>' +
+      '</div>' +
+      '<div class="modal-field"><label class="form-label" for="p-milestone">Next milestone</label>' +
+        '<input class="input" id="p-milestone" type="text" value="' + escapeHtml(existing ? (existing.next_milestone || '') : '') + '" /></div>' +
+      '<div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: isEdit ? 'Save' : 'Create',
+    initialFocus: '#p-name',
+    onConfirm: async (root) => {
+      const name = (root.querySelector('#p-name').value || '').trim();
+      if (!name) { setModalError(root, 'Name is required.'); return false; }
+      const patch = {
+        name,
+        description: root.querySelector('#p-desc').value || null,
+        status: root.querySelector('#p-status').value,
+        progress: Number(root.querySelector('#p-progress').value) || 0,
+        next_milestone: root.querySelector('#p-milestone').value || null,
+      };
+      setModalBusy(root, true, 'Saving…');
+      const res = isEdit
+        ? await updateProject(existing.id, patch)
+        : await createProject(state.selectedUserId, patch);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast(isEdit ? 'Project updated' : 'Project created');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+function confirmDeleteProject(proj) {
+  if (!proj) return;
+  openModal({
+    eyebrow: 'Delete project',
+    title: 'Delete <em>' + escapeHtml(proj.name || 'Untitled') + '</em>?',
+    bodyHtml: '<p class="modal-prose">This removes the project row permanently. Deliverables, invoices and activity linked to it by ID will be orphaned.</p><div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    onConfirm: async (root) => {
+      setModalBusy(root, true, 'Deleting…');
+      const res = await deleteProject(proj.id);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast('Project deleted');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+function showInvoiceModal(existing) {
+  if (!state.selectedUserId) return;
+  const isEdit = !!existing;
+  const projects = (state.selectedBundle && state.selectedBundle.projects) || [];
+  const projOptions = ['<option value="">— No project —</option>'].concat(
+    projects.map(p => '<option value="' + escapeHtml(p.id) + '"' +
+      (existing && existing.project_id === p.id ? ' selected' : '') + '>' +
+      escapeHtml(p.name || 'Untitled') + '</option>')
+  ).join('');
+  const amtDollars = existing ? ((existing.amount_cents || 0) / 100).toFixed(2) : '';
+  openModal({
+    eyebrow: isEdit ? 'Edit invoice' : 'New invoice',
+    title: isEdit ? 'Edit <em>invoice</em>.' : 'Create an <em>invoice</em>.',
+    bodyHtml:
+      '<div class="form-grid">' +
+        '<div class="modal-field"><label class="form-label" for="i-number">Number</label>' +
+          '<input class="input" id="i-number" type="text" value="' + escapeHtml(existing ? (existing.number || '') : suggestInvoiceNumber()) + '" /></div>' +
+        '<div class="modal-field"><label class="form-label" for="i-amount">Amount USD</label>' +
+          '<input class="input" id="i-amount" type="text" inputmode="decimal" placeholder="0.00" value="' + amtDollars + '" /></div>' +
+      '</div>' +
+      '<div class="modal-field"><label class="form-label" for="i-project">Project</label>' +
+        '<select class="select" id="i-project">' + projOptions + '</select></div>' +
+      '<div class="form-grid">' +
+        '<div class="modal-field"><label class="form-label" for="i-issued">Issued</label>' +
+          '<input class="input" id="i-issued" type="date" value="' + (existing && existing.issued_at ? fmtDateInput(existing.issued_at) : todayIso()) + '" /></div>' +
+        '<div class="modal-field"><label class="form-label" for="i-due">Due</label>' +
+          '<input class="input" id="i-due" type="date" value="' + (existing && existing.due_at ? fmtDateInput(existing.due_at) : daysFromNow(14)) + '" /></div>' +
+      '</div>' +
+      '<div class="modal-field"><label class="form-label" for="i-status">Status</label>' +
+        '<select class="select" id="i-status">' + statusOptions(['due', 'paid', 'overdue'], existing ? existing.status : 'due') + '</select></div>' +
+      '<div class="modal-field"><label class="form-label" for="i-pdf">PDF URL (optional)</label>' +
+        '<input class="input" id="i-pdf" type="url" placeholder="https://…" value="' + escapeHtml(existing ? (existing.pdf_url || '') : '') + '" /></div>' +
+      '<div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: isEdit ? 'Save' : 'Create',
+    initialFocus: '#i-number',
+    onConfirm: async (root) => {
+      const number = (root.querySelector('#i-number').value || '').trim();
+      if (!number) { setModalError(root, 'Invoice number is required.'); return false; }
+      const amtRaw = (root.querySelector('#i-amount').value || '').replace(/[^0-9.]/g, '');
+      const amtDollars = Number(amtRaw);
+      if (!isFinite(amtDollars) || amtDollars < 0) { setModalError(root, 'Enter a valid amount in dollars.'); return false; }
+      const projSel = root.querySelector('#i-project');
+      const projId = projSel.value || null;
+      const projName = projId ? (projects.find(p => p.id === projId) || {}).name || null : null;
+      const status = root.querySelector('#i-status').value;
+      const patch = {
+        number,
+        project_id: projId,
+        project_name: projName,
+        amount_cents: Math.round(amtDollars * 100),
+        issued_at: root.querySelector('#i-issued').value || null,
+        due_at: root.querySelector('#i-due').value || null,
+        status,
+        pdf_url: root.querySelector('#i-pdf').value || null,
+      };
+      if (status === 'paid' && !(existing && existing.paid_at)) patch.paid_at = new Date().toISOString();
+      if (status !== 'paid') patch.paid_at = null;
+      setModalBusy(root, true, 'Saving…');
+      const res = isEdit
+        ? await updateInvoice(existing.id, patch)
+        : await createInvoice(state.selectedUserId, patch);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast(isEdit ? 'Invoice updated' : 'Invoice created');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+function suggestInvoiceNumber() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const rand = Math.floor(Math.random() * 900 + 100);
+  return 'INV-' + y + m + '-' + rand;
+}
+
+function confirmDeleteInvoice(inv) {
+  if (!inv) return;
+  openModal({
+    eyebrow: 'Delete invoice',
+    title: 'Delete <em>' + escapeHtml(inv.number || 'invoice') + '</em>?',
+    bodyHtml: '<p class="modal-prose">This removes the invoice permanently. Consider marking it as paid or changing status instead.</p><div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    onConfirm: async (root) => {
+      setModalBusy(root, true, 'Deleting…');
+      const res = await deleteInvoice(inv.id);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast('Invoice deleted');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+const DELIVERABLE_STATUSES = ['draft', 'in_review', 'approved', 'shipped', 'archived'];
+function showDeliverableModal(existing) {
+  if (!state.selectedUserId) return;
+  const isEdit = !!existing;
+  const projects = (state.selectedBundle && state.selectedBundle.projects) || [];
+  const projOptions = ['<option value="">— No project —</option>'].concat(
+    projects.map(p => '<option value="' + escapeHtml(p.id) + '"' +
+      (existing && existing.project_id === p.id ? ' selected' : '') + '>' +
+      escapeHtml(p.name || 'Untitled') + '</option>')
+  ).join('');
+  openModal({
+    eyebrow: isEdit ? 'Edit deliverable' : 'New deliverable',
+    title: isEdit ? 'Edit <em>deliverable</em>.' : 'Add a <em>deliverable</em>.',
+    bodyHtml:
+      '<div class="modal-field"><label class="form-label" for="d-name">Name</label>' +
+        '<input class="input" id="d-name" type="text" value="' + escapeHtml(existing ? (existing.name || '') : '') + '" /></div>' +
+      '<div class="modal-field"><label class="form-label" for="d-project">Project</label>' +
+        '<select class="select" id="d-project">' + projOptions + '</select></div>' +
+      '<div class="form-grid">' +
+        '<div class="modal-field"><label class="form-label" for="d-type">File type</label>' +
+          '<input class="input" id="d-type" type="text" placeholder="PDF, FIG, MP4…" value="' + escapeHtml(existing ? (existing.file_type || '') : '') + '" /></div>' +
+        '<div class="modal-field"><label class="form-label" for="d-size">Size label</label>' +
+          '<input class="input" id="d-size" type="text" placeholder="4.2 MB" value="' + escapeHtml(existing ? (existing.size_label || '') : '') + '" /></div>' +
+      '</div>' +
+      '<div class="form-grid">' +
+        '<div class="modal-field"><label class="form-label" for="d-status">Status</label>' +
+          '<select class="select" id="d-status">' + statusOptions(DELIVERABLE_STATUSES, existing ? existing.status : 'draft') + '</select></div>' +
+        '<div class="modal-field"><label class="form-label" for="d-version">Version</label>' +
+          '<input class="input" id="d-version" type="text" placeholder="v1.0" value="' + escapeHtml(existing ? (existing.version || '') : '') + '" /></div>' +
+      '</div>' +
+      '<div class="modal-field"><label class="form-label" for="d-url">URL</label>' +
+        '<input class="input" id="d-url" type="url" placeholder="https://…" value="' + escapeHtml(existing ? (existing.url || '') : '') + '" /></div>' +
+      '<div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: isEdit ? 'Save' : 'Add',
+    initialFocus: '#d-name',
+    onConfirm: async (root) => {
+      const name = (root.querySelector('#d-name').value || '').trim();
+      if (!name) { setModalError(root, 'Name is required.'); return false; }
+      const projId = root.querySelector('#d-project').value || null;
+      const projName = projId ? (projects.find(p => p.id === projId) || {}).name || null : null;
+      const patch = {
+        name,
+        project_id: projId,
+        project_name: projName,
+        file_type: root.querySelector('#d-type').value || null,
+        size_label: root.querySelector('#d-size').value || null,
+        status: root.querySelector('#d-status').value,
+        version: root.querySelector('#d-version').value || null,
+        url: root.querySelector('#d-url').value || null,
+      };
+      setModalBusy(root, true, 'Saving…');
+      const res = isEdit
+        ? await updateDeliverable(existing.id, patch)
+        : await createDeliverable(state.selectedUserId, patch);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast(isEdit ? 'Deliverable updated' : 'Deliverable added');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+function confirmDeleteDeliverable(item) {
+  if (!item) return;
+  openModal({
+    eyebrow: 'Delete deliverable',
+    title: 'Delete <em>' + escapeHtml(item.name || 'deliverable') + '</em>?',
+    bodyHtml: '<p class="modal-prose">This removes the deliverable row. External files at the URL are not affected.</p><div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    onConfirm: async (root) => {
+      setModalBusy(root, true, 'Deleting…');
+      const res = await deleteDeliverable(item.id);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast('Deliverable deleted');
+      await renderUserDetail();
+      return true;
+    },
+  });
+}
+
+// ============================================================================
+// Invoice PDF
+// ============================================================================
+function downloadInvoicePDF(invoice, profile) {
+  try {
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const marginX = 48;
+    let y = 64;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(22);
+    doc.text('Clearbot', marginX, y);
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text('team.clearbot.io', marginX, y + 14);
+    doc.setTextColor(0);
+    doc.setFontSize(10);
+    doc.text('INVOICE', 612 - marginX, y, { align: 'right' });
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(invoice.number || ('INV-' + invoice.id), 612 - marginX, y + 18, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+
+    y += 60;
+    doc.setDrawColor(200);
+    doc.line(marginX, y, 612 - marginX, y);
+
+    y += 26;
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text('BILL TO', marginX, y);
+    doc.setTextColor(0);
+    doc.setFontSize(12);
+    y += 16;
+    doc.text(userDisplayName(profile) || '—', marginX, y);
+    if (profile && profile.email) { y += 14; doc.setFontSize(10); doc.text(profile.email, marginX, y); doc.setFontSize(12); }
+    if (profile && profile.primary_domain) { y += 14; doc.setFontSize(10); doc.text(profile.primary_domain, marginX, y); doc.setFontSize(12); }
+
+    const datesX = 612 - marginX;
+    let dy = y - (profile && profile.primary_domain ? 28 : profile && profile.email ? 14 : 0);
+    doc.setFontSize(9); doc.setTextColor(120);
+    doc.text('ISSUED', datesX, dy, { align: 'right' });
+    doc.setTextColor(0); doc.setFontSize(11);
+    doc.text(invoice.issued_at ? fmtShortDate(invoice.issued_at) : '—', datesX, dy + 14, { align: 'right' });
+    doc.setTextColor(120); doc.setFontSize(9);
+    doc.text('DUE', datesX, dy + 32, { align: 'right' });
+    doc.setTextColor(0); doc.setFontSize(11);
+    doc.text(invoice.due_at ? fmtShortDate(invoice.due_at) : '—', datesX, dy + 46, { align: 'right' });
+    if (invoice.paid_at) {
+      doc.setTextColor(120); doc.setFontSize(9);
+      doc.text('PAID', datesX, dy + 64, { align: 'right' });
+      doc.setTextColor(0); doc.setFontSize(11);
+      doc.text(fmtShortDate(invoice.paid_at), datesX, dy + 78, { align: 'right' });
+    }
+
+    y += 40;
+    doc.setDrawColor(200);
+    doc.line(marginX, y, 612 - marginX, y);
+
+    y += 28;
+    doc.setFontSize(9); doc.setTextColor(120);
+    doc.text('DESCRIPTION', marginX, y);
+    doc.text('AMOUNT', 612 - marginX, y, { align: 'right' });
+    doc.setTextColor(0);
+    y += 20;
+    doc.setFontSize(12);
+    doc.text(invoice.project_name || 'Professional services', marginX, y);
+    doc.text(fmtMoney(invoice.amount_cents), 612 - marginX, y, { align: 'right' });
+
+    y += 22;
+    doc.setDrawColor(220);
+    doc.line(marginX, y, 612 - marginX, y);
+    y += 24;
+    doc.setFontSize(11); doc.setTextColor(120);
+    doc.text('TOTAL', 612 - marginX - 140, y, { align: 'right' });
+    doc.setTextColor(0);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(fmtMoney(invoice.amount_cents), 612 - marginX, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+
+    y += 36;
+    const status = (invoice.status || 'due').toUpperCase();
+    doc.setFontSize(10);
+    doc.setTextColor(status === 'PAID' ? 40 : status === 'OVERDUE' ? 180 : 120);
+    doc.text('STATUS · ' + status, marginX, y);
+    doc.setTextColor(0);
+
+    y = 720;
+    doc.setFontSize(9); doc.setTextColor(150);
+    doc.text('Questions? Reply to the email this invoice came with, or reach us at team@clearbot.io.', marginX, y);
+
+    const filename = (invoice.number || ('INV-' + invoice.id)) + '.pdf';
+    doc.save(filename);
+    toast('PDF downloaded');
+  } catch (e) {
+    console.error('[team] pdf error:', e);
+    toast('Could not generate PDF', 'bad');
+  }
+}
+
+// ============================================================================
+// Aggregate views
+// ============================================================================
+async function ensureProfilesCache() {
+  if (state.allProfilesCache.length) return state.allProfilesCache;
+  state.allProfilesCache = await safeList(() =>
+    supabase.from('profiles').select('user_id, company_name, email, first_name, last_name')
+  );
+  return state.allProfilesCache;
+}
+function profileFor(uid) {
+  return state.allProfilesCache.find(p => p.user_id === uid);
+}
+
+async function renderProjectsAll() {
+  await ensureProfilesCache();
+  const rows = await safeList(() =>
+    supabase.from('projects').select('*').order('updated_at', { ascending: false }).limit(500)
+  );
+  const tbody = $('[data-projects-all-tbody]');
+  const empty = $('[data-projects-all-empty]');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.innerHTML = emptyState('No projects', 'Projects across all clients will appear here.');
+    return;
+  }
+  if (empty) empty.innerHTML = '';
+  tbody.innerHTML = rows.map(p => {
+    const pf = profileFor(p.user_id);
+    return '<tr class="is-clickable" data-open-user="' + escapeHtml(p.user_id) + '">' +
+      '<td><div class="proj-name">' + escapeHtml(p.name || 'Untitled') + '</div>' +
+          (p.description ? '<div class="sub">' + escapeHtml(p.description) + '</div>' : '') + '</td>' +
+      '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
+      '<td>' + statusBadge(p.status) + '</td>' +
+      '<td style="min-width:160px;"><div style="display:flex;align-items:center;gap:10px;">' +
+        '<span class="progress"><span class="progress-bar" style="width:' + (p.progress || 0) + '%"></span></span>' +
+        '<span class="mono">' + (p.progress || 0) + '%</span>' +
+      '</div></td>' +
+      '<td class="mono">' + (p.updated_at ? fmtRelTime(p.updated_at) : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+  tbody.querySelectorAll('[data-open-user]').forEach(tr => {
+    tr.addEventListener('click', () => openUser(tr.getAttribute('data-open-user')));
+  });
+}
+
+async function renderInvoicesAll() {
+  await ensureProfilesCache();
+  const rows = await safeList(() =>
+    supabase.from('invoices').select('*').order('issued_at', { ascending: false }).limit(500)
+  );
+  const now = Date.now();
+  const yr = new Date().getFullYear();
+  const open = rows.filter(i => (i.status || '').toLowerCase() !== 'paid');
+  const paid = rows.filter(i => (i.status || '').toLowerCase() === 'paid');
+  const overdue = open.filter(i => i.due_at && new Date(i.due_at).getTime() < now);
+  const outstanding = open.reduce((s, i) => s + (i.amount_cents || 0), 0);
+  const paidYTD = paid.filter(i => i.paid_at && new Date(i.paid_at).getFullYear() === yr)
+    .reduce((s, i) => s + (i.amount_cents || 0), 0);
+  const overdueAmt = overdue.reduce((s, i) => s + (i.amount_cents || 0), 0);
+  setTile('inv-outstanding', fmtMoney(outstanding), open.length + ' open');
+  setTile('inv-paid-ytd', fmtMoney(paidYTD), paid.length + ' settled');
+  setTile('inv-overdue', fmtMoney(overdueAmt), overdue.length + (overdue.length === 1 ? ' overdue' : ' overdue'));
+
+  const tbody = $('[data-invoices-all-tbody]');
+  const empty = $('[data-invoices-all-empty]');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.innerHTML = emptyState('No invoices', 'Invoices across all clients will appear here.');
+    return;
+  }
+  if (empty) empty.innerHTML = '';
+  tbody.innerHTML = rows.map(i => {
+    const pf = profileFor(i.user_id);
+    return '<tr>' +
+      '<td><div class="proj-name">' + escapeHtml(i.number || 'INV-' + i.id) + '</div></td>' +
+      '<td><button class="btn btn-sm" type="button" data-open-user="' + escapeHtml(i.user_id) + '">' + escapeHtml(userDisplayName(pf)) + '</button></td>' +
+      '<td class="mono">' + escapeHtml(i.project_name || '—') + '</td>' +
+      '<td class="num">' + fmtMoney(i.amount_cents) + '</td>' +
+      '<td class="mono">' + fmtShortDate(i.due_at) + '</td>' +
+      '<td>' + statusBadge(i.status) + '</td>' +
+      '<td><button class="btn btn-sm" type="button" data-pdf-global="' + escapeHtml(i.id) + '">PDF</button></td>' +
+    '</tr>';
+  }).join('');
+  tbody.querySelectorAll('[data-open-user]').forEach(btn => {
+    btn.addEventListener('click', () => openUser(btn.getAttribute('data-open-user')));
+  });
+  tbody.querySelectorAll('[data-pdf-global]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inv = rows.find(r => r.id === btn.getAttribute('data-pdf-global'));
+      if (inv) downloadInvoicePDF(inv, profileFor(inv.user_id));
+    });
+  });
+}
+
+async function renderDeliverablesAll() {
+  await ensureProfilesCache();
+  const rows = await safeList(() =>
+    supabase.from('deliverables').select('*').order('updated_at', { ascending: false }).limit(500)
+  );
+  const tbody = $('[data-deliverables-all-tbody]');
+  const empty = $('[data-deliverables-all-empty]');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.innerHTML = emptyState('No deliverables', 'Files and artifacts across all clients will appear here.');
+    return;
+  }
+  if (empty) empty.innerHTML = '';
+  tbody.innerHTML = rows.map(d => {
+    const pf = profileFor(d.user_id);
+    return '<tr class="is-clickable" data-open-user="' + escapeHtml(d.user_id) + '">' +
+      '<td><div class="proj-name">' + escapeHtml(d.name || 'Untitled') + '</div>' +
+          '<div class="sub">' + escapeHtml((d.file_type || 'FILE').toString().toUpperCase()) + (d.size_label ? ' · ' + escapeHtml(d.size_label) : '') + '</div></td>' +
+      '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
+      '<td class="mono">' + escapeHtml(d.project_name || '—') + '</td>' +
+      '<td>' + statusBadge(d.status) + '</td>' +
+      '<td class="mono">' + escapeHtml(d.version || '—') + '</td>' +
+      '<td class="mono">' + (d.updated_at ? fmtRelTime(d.updated_at) : '—') + '</td>' +
+      '<td>' + (d.url ? '<a class="btn btn-sm" href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener">Open</a>' : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+  tbody.querySelectorAll('[data-open-user]').forEach(tr => {
+    tr.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') return;
+      openUser(tr.getAttribute('data-open-user'));
+    });
+  });
+}
+
+async function renderActivityAll() {
+  await ensureProfilesCache();
+  const rows = await safeList(() =>
+    supabase.from('activity').select('*').order('created_at', { ascending: false }).limit(200)
+  );
+  const root = $('[data-activity-all]');
+  if (!root) return;
+  if (!rows.length) {
+    root.innerHTML = emptyState('No activity', 'Post activity notes from a client\'s activity tab to populate this feed.');
+    return;
+  }
+  root.innerHTML = rows.map(a => {
+    const pf = profileFor(a.user_id);
+    return '<div class="feed-item' + (a.unread ? ' new' : '') + '">' +
+      '<span class="feed-dot" aria-hidden="true"></span>' +
+      '<div class="feed-text">' +
+        '<span class="who">' + escapeHtml(userDisplayName(pf)) + (a.project_name ? ' · ' + escapeHtml(a.project_name) : '') + '</span>' +
+        escapeHtml(a.text || '') +
+      '</div>' +
+      '<div class="feed-time">' + fmtRelTime(a.created_at) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ============================================================================
+// Wiring — nav, subtabs, profile save, activity post
+// ============================================================================
+function wireNav() {
+  $$('[data-view]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      showView(el.getAttribute('data-view'));
+    });
+  });
+  $$('[data-view-link]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      showView(el.getAttribute('data-view-link'));
+    });
+  });
+  $$('[data-signout]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await supabase.auth.signOut();
+      location.replace(LOGIN_URL);
+    });
+  });
+  $$('.subtab').forEach(el => {
+    el.addEventListener('click', () => showSubtab(el.getAttribute('data-subtab')));
+  });
+  $$('[data-action="new-project"]').forEach(el => el.addEventListener('click', () => showProjectModal(null)));
+  $$('[data-action="new-invoice"]').forEach(el => el.addEventListener('click', () => showInvoiceModal(null)));
+  $$('[data-action="new-deliverable"]').forEach(el => el.addEventListener('click', () => showDeliverableModal(null)));
+
+  const save = $('[data-save-profile]');
+  if (save) {
+    save.addEventListener('click', async () => {
+      if (!state.selectedUserId) return;
+      save.setAttribute('disabled', 'true');
+      const msg = $('[data-save-msg]'); if (msg) msg.textContent = 'Saving…';
+      const patch = {
+        company_name:       document.getElementById('det-company').value || null,
+        primary_domain:     document.getElementById('det-domain').value || null,
+        timezone:           document.getElementById('det-tz').value || null,
+        first_name:         document.getElementById('det-first').value || null,
+        last_name:          document.getElementById('det-last').value || null,
+        email:              document.getElementById('det-email').value || null,
+        role:               document.getElementById('det-role').value || null,
+        notif_deliverables: !!document.getElementById('det-notif-deliverables').checked,
+        notif_messages:     !!document.getElementById('det-notif-messages').checked,
+        notif_invoices:     !!document.getElementById('det-notif-invoices').checked,
+        notif_digest:       !!document.getElementById('det-notif-digest').checked,
+        notif_slack:        !!document.getElementById('det-notif-slack').checked,
+      };
+      const res = await upsertProfile(state.selectedUserId, patch);
+      save.removeAttribute('disabled');
+      if (res.ok) {
+        if (msg) { msg.textContent = 'Saved.'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+        toast('Profile saved');
+        await renderUserDetail();
+      } else {
+        if (msg) msg.textContent = 'Error';
+        toast('Save failed: ' + (res.error || 'unknown'), 'bad');
+      }
+    });
+  }
+
+  const postBtn = $('[data-post-activity]');
+  if (postBtn) {
+    postBtn.addEventListener('click', async () => {
+      if (!state.selectedUserId) return;
+      const ta = document.getElementById('activity-text');
+      const sel = document.getElementById('activity-project');
+      const text = (ta.value || '').trim();
+      if (!text) { toast('Write a note first', 'bad'); return; }
+      const projId = sel.value || null;
+      const projName = projId
+        ? ((state.selectedBundle.projects.find(p => p.id === projId) || {}).name || null)
+        : null;
+      postBtn.setAttribute('disabled', 'true');
+      const res = await postActivity(state.selectedUserId, text, projId, projName);
+      postBtn.removeAttribute('disabled');
+      if (res.ok) {
+        ta.value = '';
+        toast('Activity posted');
+        await renderUserDetail();
+      } else {
+        toast('Post failed: ' + (res.error || 'unknown'), 'bad');
+      }
+    });
+  }
+
+  const search = $('#user-search');
+  if (search) {
+    let t = null;
+    search.addEventListener('input', () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => renderUsers(search.value), 200);
+    });
+  }
+}
+
+// ============================================================================
+// Identity + bootstrap
+// ============================================================================
+function populateIdentity() {
+  const name = userDisplayName(state.currentProfile, state.currentUser && state.currentUser.email);
+  const ini = userInitial(state.currentProfile, state.currentUser && state.currentUser.email);
+  $$('[data-user-name]').forEach(el => { el.textContent = name; });
+  $$('[data-user-initial]').forEach(el => { el.textContent = ini; });
+}
+
+function revealApp() {
+  document.documentElement.setAttribute('data-auth', 'signed-in');
+}
+
+function isAllowed(email) {
+  if (!email) return false;
+  return TEAM_EMAILS.some(e => e.toLowerCase() === email.toLowerCase());
+}
+
+async function bootstrap() {
+  const { data } = await supabase.auth.getSession();
+  if (!data || !data.session) {
+    location.replace(LOGIN_URL + '?next=' + encodeURIComponent(RETURN_URL));
+    return;
+  }
+  const user = data.session.user;
+  state.currentUser = user;
+
+  if (!isAllowed(user.email)) {
+    await showView('unauthorized');
+    revealApp();
+    return;
+  }
+
+  state.currentProfile = await safeOne(() =>
+    supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle()
+  );
+
+  populateIdentity();
+  wireNav();
+  revealApp();
+  await showView('home');
+
+  supabase.auth.onAuthStateChange((event, newSession) => {
+    if (event === 'SIGNED_OUT' || !newSession) location.replace(LOGIN_URL);
+  });
+}
+
+bootstrap().catch(e => {
+  console.error('[team] bootstrap failed:', e);
+  document.documentElement.setAttribute('data-auth', 'signed-in');
+  toast('Initialization failed. Check console.', 'bad');
+});
+</script>
+</body>
+</html>
