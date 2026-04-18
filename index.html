@@ -13,34 +13,19 @@
   ============================================================================
   Clearbot Team — Admin RLS prerequisites
   ============================================================================
-  The client portal uses per-user RLS (auth.uid() = user_id). For this
-  dashboard to see and edit other users' rows, run the following once in
-  the Supabase SQL editor. The UI still loads without it, but tables will
-  appear empty and writes will silently no-op.
+  Team dashboard access (reading/writing other users' rows) is granted by
+  the `*_team_all` RLS policies and the `is_team_member()` helper that
+  live in the client repo's `db/schema.sql`. Re-run that file in the
+  Supabase SQL editor whenever the schema or policies change — it is
+  idempotent.
 
-    create or replace function public.is_team_member()
-    returns boolean language sql stable security definer
-    set search_path = public as $$
-      select exists (select 1 from public.profiles
-        where user_id = auth.uid() and role in ('admin','team'));
-    $$;
+  To promote a teammate, either set their profile row directly:
 
-    create policy "profiles_team_all"     on public.profiles
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "projects_team_all"     on public.projects
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "deliverables_team_all" on public.deliverables
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "invoices_team_all"     on public.invoices
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "threads_team_all"      on public.message_threads
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "messages_team_all"     on public.messages
-      for all using (public.is_team_member()) with check (public.is_team_member());
-    create policy "activity_team_all"     on public.activity
-      for all using (public.is_team_member()) with check (public.is_team_member());
+    update public.profiles set role = 'admin' where email = 'name@clearbot.io';
 
-    update public.profiles set role='admin' where email='ethan@clearbot.io';
+  or edit the seed block at the bottom of `db/schema.sql`. Until their
+  `profiles.role` is 'admin' or 'team' the dashboard loads but all
+  cross-client reads/writes are silently blocked.
   ============================================================================
 -->
 <style>
@@ -1095,6 +1080,10 @@ html[data-auth="signed-in"] .app { opacity: 1; }
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5"/></svg>
       Deliverables
     </button>
+    <button class="nav-item" type="button" data-view="messages-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v12H8l-4 3z"/></svg>
+      Messages <span class="mono" data-sidebar-unread-badge hidden style="margin-left:6px;padding:1px 6px;border:1px solid var(--rule-strong);border-radius:2px;font-size:9px;">0</span>
+    </button>
     <button class="nav-item" type="button" data-view="activity-all">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
       Activity
@@ -1470,6 +1459,27 @@ html[data-auth="signed-in"] .app { opacity: 1; }
         </table>
       </div>
       <div data-deliverables-all-empty></div>
+    </section>
+
+    <!-- MESSAGES ALL -->
+    <section class="view-pane" data-view-pane="messages-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">All clients</div>
+          <h1>Messages <em>inbox</em>.</h1>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input class="input" id="messages-all-search" type="search" placeholder="Search client, subject, preview&hellip;" autocomplete="off" />
+        <label class="toggle" style="white-space:nowrap;"><input type="checkbox" id="messages-all-unread-only" />Unread only</label>
+        <span class="count" data-messages-all-count>&mdash;</span>
+      </div>
+      <div class="msg-shell">
+        <div class="msg-list">
+          <div class="msg-threads" data-messages-all-threads></div>
+        </div>
+        <div class="msg-pane" data-messages-all-pane></div>
+      </div>
     </section>
 
     <!-- ACTIVITY ALL -->
@@ -2000,6 +2010,7 @@ const VIEW_TITLES = {
   'projects-all': 'Projects',
   'invoices-all': 'Invoices',
   'deliverables-all': 'Deliverables',
+  'messages-all': 'Messages',
   'activity-all': 'Activity',
   'unauthorized': 'Access',
 };
@@ -2023,6 +2034,7 @@ async function showView(name) {
     else if (name === 'projects-all')      await renderProjectsAll();
     else if (name === 'invoices-all')      await renderInvoicesAll();
     else if (name === 'deliverables-all')  await renderDeliverablesAll();
+    else if (name === 'messages-all')      await renderMessagesAll();
     else if (name === 'activity-all')      await renderActivityAll();
   } catch (e) { console.error('[team] render failed for', name, e); }
 }
@@ -2082,6 +2094,7 @@ async function renderHome() {
     ? 'Inbox zero'
     : 'Across ' + unreadClientCount + (unreadClientCount === 1 ? ' client' : ' clients'));
   setTile('activity-7d', recent7, 'notes this week');
+  updateSidebarUnreadBadge(unreadThreads);
 
   const feedRoot = $('[data-home-activity]');
   if (feedRoot) {
@@ -3104,6 +3117,178 @@ async function renderDeliverablesAll() {
 
   wireAllViewSearch(searchEl, draw);
   draw((searchEl && searchEl.value || '').trim().toLowerCase());
+}
+
+async function renderMessagesAll() {
+  await ensureProfilesCache();
+  const threads = await safeList(() =>
+    supabase.from('message_threads')
+      .select('id, user_id, title, preview, project_name, unread_count, status, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(300)
+  );
+
+  const listRoot  = $('[data-messages-all-threads]');
+  const paneRoot  = $('[data-messages-all-pane]');
+  const searchEl  = $('#messages-all-search');
+  const unreadEl  = $('#messages-all-unread-only');
+  const countEl   = $('[data-messages-all-count]');
+  updateSidebarUnreadBadge(threads);
+  if (!listRoot || !paneRoot) return;
+
+  // Attach a display name + haystack to each thread for cheap filtering.
+  for (const t of threads) {
+    const pf = profileFor(t.user_id);
+    t._client = userDisplayName(pf);
+    t._haystack = [
+      t.title, t.preview, t.project_name, t._client,
+      pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  const view = { activeId: null };
+
+  const renderEmptyPane = (msg) => {
+    paneRoot.innerHTML = '<div class="msg-pane-body" style="align-items:center;justify-content:center;">' +
+      emptyState('Nothing selected', msg || 'Pick a thread on the left.') +
+    '</div>';
+  };
+
+  const renderPane = async (thread) => {
+    view.activeId = thread.id;
+    const pf = profileFor(thread.user_id);
+    paneRoot.innerHTML =
+      '<div class="msg-pane-head">' +
+        '<div>' +
+          '<div class="title">' + escapeHtml(thread.title || 'Thread') + '</div>' +
+          '<div class="sub">' + escapeHtml(userDisplayName(pf)) + ' · ' + escapeHtml(thread.project_name || 'General') + '</div>' +
+        '</div>' +
+        statusBadge(thread.status || 'active') +
+      '</div>' +
+      '<div class="msg-pane-body" data-msg-body><div class="empty" style="padding:24px;">Loading…</div></div>' +
+      '<form class="msg-composer" data-composer>' +
+        '<textarea class="textarea" data-composer-input placeholder="Reply as ClearBot…" rows="2" maxlength="4000"></textarea>' +
+        '<button class="btn btn-primary" type="submit" data-composer-send>Send</button>' +
+      '</form>';
+
+    const body = paneRoot.querySelector('[data-msg-body]');
+    const messages = await listThreadMessages(thread.id);
+    const meId = state.currentUser && state.currentUser.id;
+    if (!messages.length) {
+      body.innerHTML = '<div class="empty" style="padding:24px;">No messages in this thread yet.</div>';
+    } else {
+      body.innerHTML = messages.map(m => renderMessageBubble(m, meId)).join('');
+      body.scrollTop = body.scrollHeight;
+    }
+
+    const form = paneRoot.querySelector('[data-composer]');
+    const input = paneRoot.querySelector('[data-composer-input]');
+    const btn = paneRoot.querySelector('[data-composer-send]');
+    if (form && input && btn) {
+      input.focus();
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+      });
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = (input.value || '').trim();
+        if (!text) return;
+        btn.setAttribute('disabled', 'true');
+        const prev = btn.textContent;
+        btn.textContent = 'Sending…';
+        const res = await sendThreadMessage({
+          threadId: thread.id,
+          userId: thread.user_id,
+          senderId: meId,
+          body: text,
+        });
+        btn.removeAttribute('disabled');
+        btn.textContent = prev;
+        if (!res.ok) { toast('Send failed: ' + (res.error || 'unknown'), 'bad'); return; }
+        input.value = '';
+        if (res.data && body) {
+          body.insertAdjacentHTML('beforeend', renderMessageBubble(res.data, meId));
+          body.scrollTop = body.scrollHeight;
+        }
+        thread.preview = text.slice(0, 140);
+        thread.updated_at = new Date().toISOString();
+        thread.unread_count = (thread.unread_count || 0) + 1;
+        threads.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+        drawList((searchEl && searchEl.value || '').trim().toLowerCase(), !!(unreadEl && unreadEl.checked));
+      });
+    }
+  };
+
+  const drawList = (q, unreadOnly) => {
+    const filtered = threads.filter(t => {
+      if (unreadOnly && !(t.unread_count > 0)) return false;
+      if (!q) return true;
+      return matchAll(t._haystack, q);
+    });
+    if (countEl) countEl.textContent = (q || unreadOnly)
+      ? filtered.length + (filtered.length === 1 ? ' match' : ' matches')
+      : filtered.length + (filtered.length === 1 ? ' thread' : ' threads');
+    if (!threads.length) {
+      listRoot.innerHTML = '<div style="padding:24px 16px;">' + emptyState('No threads', 'When clients start threads, they\'ll appear here.') + '</div>';
+      renderEmptyPane('No threads yet.');
+      return;
+    }
+    if (!filtered.length) {
+      listRoot.innerHTML = '<div style="padding:24px 16px;">' + emptyState('No matches', 'Adjust the search or toggle "Unread only" off.') + '</div>';
+      renderEmptyPane('No threads match the current filter.');
+      return;
+    }
+    listRoot.innerHTML = filtered.map(t =>
+      '<a class="msg-thread' + (t.id === view.activeId ? ' active' : '') + '" href="#" data-thread-id="' + escapeHtml(t.id) + '">' +
+        '<div class="title">' + escapeHtml(t.title || 'Thread') + ((t.unread_count || 0) > 0 ? ' <span class="unread-dot" aria-hidden="true"></span>' : '') + '</div>' +
+        '<div class="preview">' + escapeHtml(t.preview || '') + '</div>' +
+        '<div class="meta">' + escapeHtml(t._client || 'Client') + ' · ' + escapeHtml(t.project_name || 'General') + ' · ' + fmtRelTime(t.updated_at) + '</div>' +
+      '</a>'
+    ).join('');
+    listRoot.querySelectorAll('[data-thread-id]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = el.getAttribute('data-thread-id');
+        const t = threads.find(x => x.id === id);
+        if (t) {
+          view.activeId = id;
+          listRoot.querySelectorAll('.msg-thread').forEach(a => a.classList.remove('active'));
+          el.classList.add('active');
+          renderPane(t);
+        }
+      });
+    });
+
+    // Preserve selection, else pick the top row.
+    if (!filtered.find(t => t.id === view.activeId)) {
+      renderPane(filtered[0]);
+    }
+  };
+
+  const rerun = () => drawList(
+    (searchEl && searchEl.value || '').trim().toLowerCase(),
+    !!(unreadEl && unreadEl.checked)
+  );
+
+  wireAllViewSearch(searchEl, () => rerun());
+  if (unreadEl && unreadEl.dataset.bound !== '1') {
+    unreadEl.dataset.bound = '1';
+    unreadEl.addEventListener('change', rerun);
+  }
+
+  rerun();
+}
+
+function updateSidebarUnreadBadge(threads) {
+  const el = document.querySelector('[data-sidebar-unread-badge]');
+  if (!el) return;
+  const total = (threads || []).reduce((s, t) => s + (t.unread_count || 0), 0);
+  if (total > 0) {
+    el.textContent = String(total);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
 }
 
 async function renderActivityAll() {
