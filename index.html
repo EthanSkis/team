@@ -35,6 +35,8 @@
       for all using (public.is_team_member()) with check (public.is_team_member());
     create policy "threads_team_all"      on public.message_threads
       for all using (public.is_team_member()) with check (public.is_team_member());
+    create policy "messages_team_all"     on public.messages
+      for all using (public.is_team_member()) with check (public.is_team_member());
     create policy "activity_team_all"     on public.activity
       for all using (public.is_team_member()) with check (public.is_team_member());
 
@@ -732,6 +734,37 @@ html[data-auth="signed-in"] .app { opacity: 1; }
   gap: 16px;
   overflow-y: auto;
 }
+.msg-bubble {
+  max-width: 72ch;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: rgba(243, 241, 234, 0.02);
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.msg-bubble .author {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.msg-bubble.mine { background: rgba(255, 255, 255, 0.04); border-color: var(--rule-strong); align-self: flex-end; }
+.msg-composer {
+  padding: 14px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.msg-composer .textarea { min-height: 48px; }
 .empty { text-align: center; color: var(--ink-dim); padding: 48px 24px; }
 .empty .headline {
   font-family: var(--display);
@@ -1878,6 +1911,31 @@ function postActivity(userId, text, projectId, projectName) {
     })
   );
 }
+function listThreadMessages(threadId, limit = 200) {
+  return safeList(() =>
+    supabase.from('messages')
+      .select('id, thread_id, sender_id, sender_role, body, created_at')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true })
+      .limit(limit)
+  );
+}
+async function sendThreadMessage({ threadId, userId, senderId, body }) {
+  const text = (body || '').trim();
+  if (!text) return { ok: false, error: 'Empty message' };
+  return safeWrite(() =>
+    supabase.from('messages')
+      .insert({
+        thread_id: threadId,
+        user_id: userId,
+        sender_id: senderId || null,
+        sender_role: 'team',
+        body: text,
+      })
+      .select('id, thread_id, sender_id, sender_role, body, created_at')
+      .single()
+  );
+}
 async function dashboardStats() {
   const [profilesCount, profiles, projects, invoices, activity] = await Promise.all([
     (async () => {
@@ -2284,42 +2342,113 @@ function renderUserActivity(bundle) {
   ).join('');
 }
 
-function renderUserMessages(bundle) {
+function renderMessageBubble(m, meId) {
+  const mine = m.sender_role === 'team' || m.sender_id === meId;
+  const author = m.sender_role === 'team' ? 'ClearBot' : 'Client';
+  return '<div class="msg-bubble' + (mine ? ' mine' : '') + '">' +
+    '<div class="author"><span>' + escapeHtml(author) + '</span><span class="mono">' + fmtRelTime(m.created_at) + '</span></div>' +
+    escapeHtml(m.body || '').replace(/\n/g, '<br/>') +
+  '</div>';
+}
+
+async function renderUserMessages(bundle) {
   const list = $('[data-threads]');
   const pane = $('[data-thread-pane]');
   if (!list || !pane) return;
-  const threads = bundle.threads || [];
+  const threads = (bundle.threads || []).slice();
   if (!threads.length) {
-    list.innerHTML = '<div style="padding:24px 16px;">' + emptyState('No threads', 'Client message threads appear here.') + '</div>';
-    pane.innerHTML = '<div class="msg-pane-body" style="align-items:center;justify-content:center;">' + emptyState('Read-only', 'Thread content isn\'t stored yet in the schema — only thread metadata.') + '</div>';
+    list.innerHTML = '<div style="padding:24px 16px;">' + emptyState('No threads', 'Client message threads appear here as the client starts conversations.') + '</div>';
+    pane.innerHTML = '<div class="msg-pane-body" style="align-items:center;justify-content:center;">' + emptyState('Nothing selected', 'When the client opens a thread it will show up in this list.') + '</div>';
     return;
   }
-  list.innerHTML = threads.map((t, i) =>
-    '<a class="msg-thread' + (i === 0 ? ' active' : '') + '" href="#" data-thread-idx="' + i + '">' +
-      '<div class="title">' + escapeHtml(t.title || 'Thread') + ((t.unread_count || 0) > 0 ? ' <span class="unread-dot" aria-hidden="true"></span>' : '') + '</div>' +
-      '<div class="preview">' + escapeHtml(t.preview || '') + '</div>' +
-      '<div class="meta">' + escapeHtml(t.project_name || 'General') + ' · ' + fmtRelTime(t.updated_at) + '</div>' +
-    '</a>'
-  ).join('');
-  const renderPane = (idx) => {
-    const active = threads[idx];
+
+  const renderList = (activeId) => {
+    list.innerHTML = threads.map(t =>
+      '<a class="msg-thread' + (t.id === activeId ? ' active' : '') + '" href="#" data-thread-id="' + escapeHtml(t.id) + '">' +
+        '<div class="title">' + escapeHtml(t.title || 'Thread') + ((t.unread_count || 0) > 0 ? ' <span class="unread-dot" aria-hidden="true"></span>' : '') + '</div>' +
+        '<div class="preview">' + escapeHtml(t.preview || '') + '</div>' +
+        '<div class="meta">' + escapeHtml(t.project_name || 'General') + ' · ' + fmtRelTime(t.updated_at) + '</div>' +
+      '</a>'
+    ).join('');
+    list.querySelectorAll('[data-thread-id]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        renderPane(el.getAttribute('data-thread-id'));
+      });
+    });
+  };
+
+  const renderPane = async (threadId) => {
+    const active = threads.find(t => t.id === threadId);
+    if (!active) return;
+    renderList(threadId);
     pane.innerHTML =
       '<div class="msg-pane-head">' +
         '<div><div class="title">' + escapeHtml(active.title || 'Thread') + '</div>' +
         '<div class="sub">' + escapeHtml(active.project_name || 'General') + '</div></div>' +
         statusBadge(active.status || 'active') +
       '</div>' +
-      '<div class="msg-pane-body">' + emptyState('Read-only', 'Message content is not persisted in the current schema.') + '</div>';
+      '<div class="msg-pane-body" data-msg-body><div class="empty" style="padding:24px;">Loading…</div></div>' +
+      '<form class="msg-composer" data-composer>' +
+        '<textarea class="textarea" data-composer-input placeholder="Reply as ClearBot…" rows="2" maxlength="4000"></textarea>' +
+        '<button class="btn btn-primary" type="submit" data-composer-send>Send</button>' +
+      '</form>';
+
+    const body = pane.querySelector('[data-msg-body]');
+    const messages = await listThreadMessages(threadId);
+    const meId = state.currentUser && state.currentUser.id;
+    if (!messages.length) {
+      body.innerHTML = '<div class="empty" style="padding:24px;">No messages in this thread yet.</div>';
+    } else {
+      body.innerHTML = messages.map(m => renderMessageBubble(m, meId)).join('');
+      body.scrollTop = body.scrollHeight;
+    }
+
+    const form = pane.querySelector('[data-composer]');
+    const input = pane.querySelector('[data-composer-input]');
+    const btn = pane.querySelector('[data-composer-send]');
+    if (form && input && btn) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = (input.value || '').trim();
+        if (!text) return;
+        btn.setAttribute('disabled', 'true');
+        const prev = btn.textContent;
+        btn.textContent = 'Sending…';
+        const res = await sendThreadMessage({
+          threadId,
+          userId: state.selectedUserId,
+          senderId: meId,
+          body: text,
+        });
+        btn.removeAttribute('disabled');
+        btn.textContent = prev;
+        if (!res.ok) {
+          toast('Send failed: ' + (res.error || 'unknown'), 'bad');
+          return;
+        }
+        input.value = '';
+        if (res.data && body) {
+          body.insertAdjacentHTML('beforeend', renderMessageBubble(res.data, meId));
+          body.scrollTop = body.scrollHeight;
+        }
+        // Optimistically bump the thread's preview locally.
+        active.preview = text.slice(0, 140);
+        active.updated_at = new Date().toISOString();
+        active.unread_count = (active.unread_count || 0) + 1;
+        threads.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+        renderList(threadId);
+      });
+    }
   };
-  renderPane(0);
-  list.querySelectorAll('[data-thread-idx]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      list.querySelectorAll('.msg-thread').forEach(a => a.classList.remove('active'));
-      el.classList.add('active');
-      renderPane(Number(el.getAttribute('data-thread-idx')));
-    });
-  });
+
+  renderPane(threads[0].id);
 }
 
 function populateActivityProjectSelect(bundle) {
