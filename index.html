@@ -2074,6 +2074,9 @@ const VIEW_TITLES = {
 };
 
 async function showView(name) {
+  if (state.currentView === 'messages-all' && name !== 'messages-all') {
+    teardownMessagesAllChannels();
+  }
   state.currentView = name;
   $$('[data-view-pane]').forEach(el => {
     el.hidden = el.getAttribute('data-view-pane') !== name;
@@ -3178,14 +3181,42 @@ async function renderDeliverablesAll() {
   draw((searchEl && searchEl.value || '').trim().toLowerCase());
 }
 
+const messagesAllChannels = { list: null, pane: null, seenIds: new Set() };
+function teardownMessagesAllChannels() {
+  if (messagesAllChannels.list) {
+    try { supabase.removeChannel(messagesAllChannels.list); } catch (_) {}
+    messagesAllChannels.list = null;
+  }
+  if (messagesAllChannels.pane) {
+    try { supabase.removeChannel(messagesAllChannels.pane); } catch (_) {}
+    messagesAllChannels.pane = null;
+  }
+  messagesAllChannels.seenIds = new Set();
+}
+
 async function renderMessagesAll() {
+  teardownMessagesAllChannels();
   await ensureProfilesCache();
-  const threads = await safeList(() =>
-    supabase.from('message_threads')
-      .select('id, user_id, title, preview, project_name, unread_count, status, updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(300)
-  );
+
+  async function fetchThreads() {
+    const rows = await safeList(() =>
+      supabase.from('message_threads')
+        .select('id, user_id, title, preview, project_name, unread_count, status, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(300)
+    );
+    for (const t of rows) {
+      const pf = profileFor(t.user_id);
+      t._client = userDisplayName(pf);
+      t._haystack = [
+        t.title, t.preview, t.project_name, t._client,
+        pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
+      ].filter(Boolean).join(' ').toLowerCase();
+    }
+    return rows;
+  }
+
+  let threads = await fetchThreads();
 
   const listRoot  = $('[data-messages-all-threads]');
   const paneRoot  = $('[data-messages-all-pane]');
@@ -3194,16 +3225,6 @@ async function renderMessagesAll() {
   const countEl   = $('[data-messages-all-count]');
   updateSidebarUnreadBadge(threads);
   if (!listRoot || !paneRoot) return;
-
-  // Attach a display name + haystack to each thread for cheap filtering.
-  for (const t of threads) {
-    const pf = profileFor(t.user_id);
-    t._client = userDisplayName(pf);
-    t._haystack = [
-      t.title, t.preview, t.project_name, t._client,
-      pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
-    ].filter(Boolean).join(' ').toLowerCase();
-  }
 
   const view = { activeId: null };
 
@@ -3233,12 +3254,38 @@ async function renderMessagesAll() {
     const body = paneRoot.querySelector('[data-msg-body]');
     const messages = await listThreadMessages(thread.id);
     const meId = state.currentUser && state.currentUser.id;
+    messagesAllChannels.seenIds = new Set(messages.map(m => m.id));
     if (!messages.length) {
       body.innerHTML = '<div class="empty" style="padding:24px;">No messages in this thread yet.</div>';
     } else {
       body.innerHTML = messages.map(m => renderMessageBubble(m, meId)).join('');
       body.scrollTop = body.scrollHeight;
     }
+
+    if (messagesAllChannels.pane) {
+      try { supabase.removeChannel(messagesAllChannels.pane); } catch (_) {}
+      messagesAllChannels.pane = null;
+    }
+    messagesAllChannels.pane = supabase
+      .channel('team-messages:' + thread.id)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: 'thread_id=eq.' + thread.id,
+      }, (payload) => {
+        const m = payload.new;
+        if (!m || messagesAllChannels.seenIds.has(m.id)) return;
+        messagesAllChannels.seenIds.add(m.id);
+        if (view.activeId !== thread.id) return;
+        const liveBody = paneRoot.querySelector('[data-msg-body]');
+        if (!liveBody) return;
+        const emptyEl = liveBody.querySelector('.empty');
+        if (emptyEl) liveBody.innerHTML = '';
+        liveBody.insertAdjacentHTML('beforeend', renderMessageBubble(m, meId));
+        liveBody.scrollTop = liveBody.scrollHeight;
+      })
+      .subscribe();
 
     const form = paneRoot.querySelector('[data-composer]');
     const input = paneRoot.querySelector('[data-composer-input]');
@@ -3265,15 +3312,13 @@ async function renderMessagesAll() {
         btn.textContent = prev;
         if (!res.ok) { toast('Send failed: ' + (res.error || 'unknown'), 'bad'); return; }
         input.value = '';
+        if (res.data && res.data.id) messagesAllChannels.seenIds.add(res.data.id);
         if (res.data && body) {
+          const emptyEl = body.querySelector('.empty');
+          if (emptyEl) body.innerHTML = '';
           body.insertAdjacentHTML('beforeend', renderMessageBubble(res.data, meId));
           body.scrollTop = body.scrollHeight;
         }
-        thread.preview = text.slice(0, 140);
-        thread.updated_at = new Date().toISOString();
-        thread.unread_count = (thread.unread_count || 0) + 1;
-        threads.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
-        drawList((searchEl && searchEl.value || '').trim().toLowerCase(), !!(unreadEl && unreadEl.checked));
       });
     }
   };
@@ -3336,6 +3381,25 @@ async function renderMessagesAll() {
   }
 
   rerun();
+
+  let threadsRefreshTimer = null;
+  const refreshThreadsSoon = () => {
+    if (threadsRefreshTimer) return;
+    threadsRefreshTimer = setTimeout(async () => {
+      threadsRefreshTimer = null;
+      threads = await fetchThreads();
+      updateSidebarUnreadBadge(threads);
+      rerun();
+    }, 50);
+  };
+  messagesAllChannels.list = supabase
+    .channel('team-threads')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'message_threads',
+    }, refreshThreadsSoon)
+    .subscribe();
 }
 
 function updateSidebarUnreadBadge(threads) {
