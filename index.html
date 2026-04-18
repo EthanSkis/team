@@ -659,10 +659,30 @@ html[data-auth="signed-in"] .app { opacity: 1; }
   grid-template-columns: 300px 1fr;
   border: 1px solid var(--rule);
   border-radius: 2px;
-  height: calc(100dvh - var(--topbar-h) - 200px);
-  min-height: 480px;
+  min-height: 0;
   overflow: hidden;
   background: rgba(243, 241, 234, 0.012);
+}
+body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])),
+body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .app {
+  height: 100dvh;
+  overflow: hidden;
+}
+body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 28px;
+}
+body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .view-pane[data-view-pane="messages-all"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
+  flex: 1 1 auto;
 }
 .msg-list { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; }
 .msg-threads { overflow-y: auto; flex: 1; }
