@@ -1088,6 +1088,10 @@ html[data-auth="signed-in"] .app { opacity: 1; }
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
       Activity
     </button>
+    <button class="nav-item" type="button" data-view="codes-all">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Access Codes
+    </button>
     <div class="sidebar-group">Account</div>
     <button class="nav-item" type="button" data-signout>
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
@@ -1493,6 +1497,37 @@ html[data-auth="signed-in"] .app { opacity: 1; }
       <section class="panel bracketed">
         <div class="feed" data-activity-all></div>
       </section>
+    </section>
+
+    <!-- ACCESS CODES ALL -->
+    <section class="view-pane" data-view-pane="codes-all" hidden>
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Signup gate</div>
+          <h1>Access <em>codes</em>.</h1>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" data-action="new-code">+ Access code</button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input class="input" id="codes-all-search" type="search" placeholder="Search code or name&hellip;" autocomplete="off" />
+        <span class="count" data-codes-all-count>&mdash;</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody data-codes-all-tbody></tbody>
+        </table>
+      </div>
+      <div data-codes-all-empty></div>
     </section>
 
     <!-- UNAUTHORIZED -->
@@ -1945,6 +1980,28 @@ function postActivity(userId, text, projectId, projectName) {
     })
   );
 }
+function listAccessCodes() {
+  return safeList(() =>
+    supabase.from('access_codes').select('code, name, created_at').order('created_at', { ascending: false }).limit(500)
+  );
+}
+function generateAccessCode(len = 10) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+function createAccessCode(name) {
+  const code = generateAccessCode();
+  return safeWrite(() =>
+    supabase.from('access_codes').insert({ code, name: name || null })
+  ).then(res => ({ ...res, code }));
+}
+function deleteAccessCode(code) {
+  return safeWrite(() => supabase.from('access_codes').delete().eq('code', code));
+}
 function listThreadMessages(threadId, limit = 200) {
   return safeList(() =>
     supabase.from('messages')
@@ -2012,6 +2069,7 @@ const VIEW_TITLES = {
   'deliverables-all': 'Deliverables',
   'messages-all': 'Messages',
   'activity-all': 'Activity',
+  'codes-all': 'Access Codes',
   'unauthorized': 'Access',
 };
 
@@ -2036,6 +2094,7 @@ async function showView(name) {
     else if (name === 'deliverables-all')  await renderDeliverablesAll();
     else if (name === 'messages-all')      await renderMessagesAll();
     else if (name === 'activity-all')      await renderActivityAll();
+    else if (name === 'codes-all')         await renderCodesAll();
   } catch (e) { console.error('[team] render failed for', name, e); }
 }
 
@@ -3315,6 +3374,107 @@ async function renderActivityAll() {
   }).join('');
 }
 
+async function renderCodesAll() {
+  const rows = await listAccessCodes();
+  const tbody = $('[data-codes-all-tbody]');
+  const empty = $('[data-codes-all-empty]');
+  const countEl = $('[data-codes-all-count]');
+  const searchEl = $('#codes-all-search');
+  if (!tbody) return;
+
+  const draw = (q) => {
+    const filtered = !q ? rows : rows.filter(r =>
+      matchAll([r.code, r.name].filter(Boolean).join(' '), q)
+    );
+    if (countEl) countEl.textContent = q
+      ? filtered.length + (filtered.length === 1 ? ' match' : ' matches')
+      : filtered.length + (filtered.length === 1 ? ' code' : ' codes');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No access codes', 'Create a code and share it with a prospect so they can sign up.');
+      return;
+    }
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No matches', 'Try a shorter query.');
+      return;
+    }
+    if (empty) empty.innerHTML = '';
+    tbody.innerHTML = filtered.map(r =>
+      '<tr>' +
+        '<td><span class="mono">' + escapeHtml(r.code) + '</span></td>' +
+        '<td>' + escapeHtml(r.name || '—') + '</td>' +
+        '<td class="mono">' + (r.created_at ? fmtRelTime(r.created_at) : '—') + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' +
+          '<button type="button" class="btn btn-sm" data-copy-code="' + escapeHtml(r.code) + '">Copy</button> ' +
+          '<button type="button" class="btn btn-sm" data-delete-code="' + escapeHtml(r.code) + '">Delete</button>' +
+        '</td>' +
+      '</tr>'
+    ).join('');
+    tbody.querySelectorAll('[data-copy-code]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const code = btn.getAttribute('data-copy-code');
+        try { await navigator.clipboard.writeText(code); toast('Copied ' + code); }
+        catch (_) { toast('Copy failed'); }
+      });
+    });
+    tbody.querySelectorAll('[data-delete-code]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.getAttribute('data-delete-code');
+        const row = rows.find(r => r.code === code);
+        confirmDeleteAccessCode(row || { code });
+      });
+    });
+  };
+
+  wireAllViewSearch(searchEl, draw);
+  draw((searchEl && searchEl.value || '').trim().toLowerCase());
+}
+
+function showAccessCodeModal() {
+  openModal({
+    eyebrow: 'New access code',
+    title: 'Issue an <em>access code</em>.',
+    bodyHtml:
+      '<div class="modal-field"><label class="form-label" for="c-name">Name</label>' +
+        '<input class="input" id="c-name" type="text" placeholder="e.g. Acme Corp" /></div>' +
+      '<p class="modal-prose">A random code is generated automatically. Share it with the recipient to sign up.</p>' +
+      '<div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: 'Create',
+    initialFocus: '#c-name',
+    onConfirm: async (root) => {
+      const name = (root.querySelector('#c-name').value || '').trim();
+      if (!name) { setModalError(root, 'Name is required.'); return false; }
+      setModalBusy(root, true, 'Creating…');
+      const res = await createAccessCode(name);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      try { await navigator.clipboard.writeText(res.code); toast('Code ' + res.code + ' copied'); }
+      catch (_) { toast('Code ' + res.code + ' created'); }
+      await renderCodesAll();
+      return true;
+    },
+  });
+}
+
+function confirmDeleteAccessCode(row) {
+  if (!row) return;
+  openModal({
+    eyebrow: 'Delete access code',
+    title: 'Delete <em>' + escapeHtml(row.name || row.code) + '</em>?',
+    bodyHtml: '<p class="modal-prose">This permanently deletes the code <span class="mono">' + escapeHtml(row.code) + '</span>. Anyone holding it will no longer be able to sign up with it.</p><div class="modal-error" data-modal-error hidden></div>',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    onConfirm: async (root) => {
+      setModalBusy(root, true, 'Deleting…');
+      const res = await deleteAccessCode(row.code);
+      if (!res.ok) { setModalError(root, res.error || 'Failed.'); setModalBusy(root, false); return false; }
+      toast('Access code deleted');
+      await renderCodesAll();
+      return true;
+    },
+  });
+}
+
 // ============================================================================
 // Wiring — nav, subtabs, profile save, activity post
 // ============================================================================
@@ -3344,6 +3504,7 @@ function wireNav() {
   $$('[data-action="new-project"]').forEach(el => el.addEventListener('click', () => showProjectModal(null)));
   $$('[data-action="new-invoice"]').forEach(el => el.addEventListener('click', () => showInvoiceModal(null)));
   $$('[data-action="new-deliverable"]').forEach(el => el.addEventListener('click', () => showDeliverableModal(null)));
+  $$('[data-action="new-code"]').forEach(el => el.addEventListener('click', () => showAccessCodeModal()));
 
   const save = $('[data-save-profile]');
   if (save) {
