@@ -1736,7 +1736,7 @@ function statusBadge(status) {
     due: ['warn', 'Due'],
     overdue: ['bad', 'Overdue'],
     archived: ['', 'Archived'],
-    active: ['', 'Active'],
+    active: ['ok', 'Active'],
   };
   const hit = map[s] || ['', (status || 'Pending').toString()];
   return '<span class="badge ' + hit[0] + '"><span class="dot"></span>' + escapeHtml(hit[1]) + '</span>';
