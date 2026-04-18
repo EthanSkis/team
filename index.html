@@ -1121,7 +1121,7 @@ html[data-auth="signed-in"] .app { opacity: 1; }
           <button type="button" class="btn" data-view-link="users">Browse clients</button>
         </div>
       </div>
-      <div class="tiles">
+      <div class="tiles" style="grid-template-columns: repeat(5, 1fr);">
         <div class="tile" data-tile="total-users">
           <div class="label">Clients</div>
           <div class="val">&mdash;</div>
@@ -1134,6 +1134,11 @@ html[data-auth="signed-in"] .app { opacity: 1; }
         </div>
         <div class="tile" data-tile="outstanding">
           <div class="label">Outstanding</div>
+          <div class="val">&mdash;</div>
+          <div class="delta">&nbsp;</div>
+        </div>
+        <div class="tile" data-tile="unread-messages">
+          <div class="label">Unread Messages</div>
           <div class="val">&mdash;</div>
           <div class="delta">&nbsp;</div>
         </div>
@@ -1159,6 +1164,13 @@ html[data-auth="signed-in"] .app { opacity: 1; }
           <div class="proj-list" data-home-top-outstanding></div>
         </section>
       </div>
+      <section class="panel bracketed" style="margin-top: 20px;">
+        <div class="panel-head">
+          <h2>Unread Messages by Client</h2>
+          <span class="mono" style="font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.18em;" data-home-unread-total>&mdash;</span>
+        </div>
+        <div class="proj-list" data-home-unread-by-client></div>
+      </section>
     </section>
 
     <!-- USERS -->
@@ -1360,6 +1372,10 @@ html[data-auth="signed-in"] .app { opacity: 1; }
           <h1>Projects <em>aggregate</em>.</h1>
         </div>
       </div>
+      <div class="search-bar">
+        <input class="input" id="projects-all-search" type="search" placeholder="Search project, description, client, status&hellip;" autocomplete="off" />
+        <span class="count" data-projects-all-count>&mdash;</span>
+      </div>
       <div class="table-wrap">
         <table class="table">
           <thead>
@@ -1384,6 +1400,10 @@ html[data-auth="signed-in"] .app { opacity: 1; }
           <div class="eyebrow">All clients</div>
           <h1>Invoices <em>ledger</em>.</h1>
         </div>
+      </div>
+      <div class="search-bar">
+        <input class="input" id="invoices-all-search" type="search" placeholder="Search number, client, project, status&hellip;" autocomplete="off" />
+        <span class="count" data-invoices-all-count>&mdash;</span>
       </div>
       <div class="tiles" style="grid-template-columns: repeat(3, 1fr);">
         <div class="tile" data-tile="inv-outstanding">
@@ -1428,6 +1448,10 @@ html[data-auth="signed-in"] .app { opacity: 1; }
           <div class="eyebrow">All clients</div>
           <h1>Deliverables <em>library</em>.</h1>
         </div>
+      </div>
+      <div class="search-bar">
+        <input class="input" id="deliverables-all-search" type="search" placeholder="Search file, client, project, status&hellip;" autocomplete="off" />
+        <span class="count" data-deliverables-all-count>&mdash;</span>
       </div>
       <div class="table-wrap">
         <table class="table">
@@ -1937,7 +1961,7 @@ async function sendThreadMessage({ threadId, userId, senderId, body }) {
   );
 }
 async function dashboardStats() {
-  const [profilesCount, profiles, projects, invoices, activity] = await Promise.all([
+  const [profilesCount, profiles, projects, invoices, activity, threads] = await Promise.all([
     (async () => {
       try {
         const r = await supabase.from('profiles').select('*', { count: 'exact', head: true });
@@ -1948,8 +1972,9 @@ async function dashboardStats() {
     safeList(() => supabase.from('projects').select('id, user_id, name, status, progress, updated_at')),
     safeList(() => supabase.from('invoices').select('id, user_id, project_name, amount_cents, status, due_at, issued_at, paid_at')),
     safeList(() => supabase.from('activity').select('id, user_id, text, project_name, unread, created_at').order('created_at', { ascending: false }).limit(30)),
+    safeList(() => supabase.from('message_threads').select('id, user_id, title, project_name, preview, unread_count, updated_at').gt('unread_count', 0).order('updated_at', { ascending: false }).limit(100)),
   ]);
-  return { profilesCount, profiles, projects, invoices, activity };
+  return { profilesCount, profiles, projects, invoices, activity, threads };
 }
 
 // ============================================================================
@@ -2038,7 +2063,7 @@ async function renderHome() {
   const teamName = $('[data-team-name]');
   if (teamName) teamName.textContent = (state.currentProfile && state.currentProfile.first_name) || (state.currentUser && state.currentUser.email ? state.currentUser.email.split('@')[0] : 'team');
 
-  const { profilesCount, profiles, projects, invoices, activity } = await dashboardStats();
+  const { profilesCount, profiles, projects, invoices, activity, threads } = await dashboardStats();
   state.allProfilesCache = profiles;
 
   const active = projects.filter(p => !['shipped', 'done', 'archived'].includes((p.status || '').toLowerCase())).length;
@@ -2046,10 +2071,16 @@ async function renderHome() {
   const outstanding = openInv.reduce((s, i) => s + (i.amount_cents || 0), 0);
   const weekAgo = Date.now() - 7 * 86400000;
   const recent7 = activity.filter(a => a.created_at && new Date(a.created_at).getTime() >= weekAgo).length;
+  const unreadThreads = threads || [];
+  const unreadTotal = unreadThreads.reduce((s, t) => s + (t.unread_count || 0), 0);
+  const unreadClientCount = new Set(unreadThreads.map(t => t.user_id)).size;
 
   setTile('total-users', profilesCount || profiles.length, profiles.length + ' profiles');
   setTile('active-projects', active, projects.length + ' total');
   setTile('outstanding', openInv.length ? fmtMoney(outstanding) : '$0<small>.00</small>', openInv.length + (openInv.length === 1 ? ' open' : ' open'));
+  setTile('unread-messages', unreadTotal, unreadTotal === 0
+    ? 'Inbox zero'
+    : 'Across ' + unreadClientCount + (unreadClientCount === 1 ? ' client' : ' clients'));
   setTile('activity-7d', recent7, 'notes this week');
 
   const feedRoot = $('[data-home-activity]');
@@ -2099,6 +2130,51 @@ async function renderHome() {
       });
     }
   }
+
+  const unreadRoot = $('[data-home-unread-by-client]');
+  const unreadTotalEl = $('[data-home-unread-total]');
+  if (unreadRoot) {
+    // Collapse threads into one card per client, showing the total and latest preview.
+    const byUser = new Map();
+    for (const t of unreadThreads) {
+      const cur = byUser.get(t.user_id) || { uid: t.user_id, count: 0, latest: null, threads: [] };
+      cur.count += (t.unread_count || 0);
+      if (!cur.latest || new Date(t.updated_at || 0) > new Date(cur.latest.updated_at || 0)) cur.latest = t;
+      cur.threads.push(t);
+      byUser.set(t.user_id, cur);
+    }
+    const rows = Array.from(byUser.values()).sort((a, b) => b.count - a.count);
+    if (unreadTotalEl) {
+      unreadTotalEl.textContent = rows.length
+        ? rows.length + (rows.length === 1 ? ' CLIENT' : ' CLIENTS')
+        : 'INBOX ZERO';
+    }
+    if (!rows.length) {
+      unreadRoot.innerHTML = emptyState('Inbox zero', 'No clients have unread messages right now.');
+    } else {
+      unreadRoot.innerHTML = rows.map(r => {
+        const pf = profiles.find(p => p.user_id === r.uid);
+        const latestThread = r.latest || {};
+        const preview = latestThread.preview || latestThread.title || '';
+        const when = latestThread.updated_at ? fmtRelTime(latestThread.updated_at) : '';
+        return '<button class="proj-card" type="button" data-open-user-messages="' + escapeHtml(r.uid) + '">' +
+          '<div class="proj-card-head">' +
+            '<span class="proj-card-name">' + escapeHtml(userDisplayName(pf)) + '</span>' +
+            '<span class="mono">' + r.count + (r.count === 1 ? ' msg' : ' msgs') + '</span>' +
+          '</div>' +
+          (preview
+            ? '<div class="sub" style="font-size:11px; color:var(--ink-dim); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+                escapeHtml(preview) +
+                (when ? ' <span class="mono" style="color:var(--ink-faint);">· ' + escapeHtml(when) + '</span>' : '') +
+              '</div>'
+            : '') +
+        '</button>';
+      }).join('');
+      unreadRoot.querySelectorAll('[data-open-user-messages]').forEach(el => {
+        el.addEventListener('click', () => openUser(el.getAttribute('data-open-user-messages'), 'messages'));
+      });
+    }
+  }
 }
 
 // ============================================================================
@@ -2140,8 +2216,9 @@ async function renderUsers(query) {
 // ============================================================================
 // Renderers — User detail
 // ============================================================================
-async function openUser(userId) {
+async function openUser(userId, subtab) {
   state.selectedUserId = userId;
+  if (subtab) state.currentSubtab = subtab;
   await showView('user-detail');
 }
 
@@ -2822,6 +2899,23 @@ function profileFor(uid) {
   return state.allProfilesCache.find(p => p.user_id === uid);
 }
 
+function wireAllViewSearch(inputEl, rerender) {
+  if (!inputEl || inputEl.dataset.bound === '1') return;
+  inputEl.dataset.bound = '1';
+  let t = null;
+  inputEl.addEventListener('input', () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => rerender((inputEl.value || '').trim().toLowerCase()), 120);
+  });
+}
+
+function matchAll(haystack, needle) {
+  if (!needle) return true;
+  const parts = needle.split(/\s+/).filter(Boolean);
+  const hay = haystack.toLowerCase();
+  return parts.every(p => hay.indexOf(p) !== -1);
+}
+
 async function renderProjectsAll() {
   await ensureProfilesCache();
   const rows = await safeList(() =>
@@ -2829,30 +2923,54 @@ async function renderProjectsAll() {
   );
   const tbody = $('[data-projects-all-tbody]');
   const empty = $('[data-projects-all-empty]');
+  const countEl = $('[data-projects-all-count]');
+  const searchEl = $('#projects-all-search');
   if (!tbody) return;
-  if (!rows.length) {
-    tbody.innerHTML = '';
-    if (empty) empty.innerHTML = emptyState('No projects', 'Projects across all clients will appear here.');
-    return;
-  }
-  if (empty) empty.innerHTML = '';
-  tbody.innerHTML = rows.map(p => {
-    const pf = profileFor(p.user_id);
-    return '<tr class="is-clickable" data-open-user="' + escapeHtml(p.user_id) + '">' +
-      '<td><div class="proj-name">' + escapeHtml(p.name || 'Untitled') + '</div>' +
-          (p.description ? '<div class="sub">' + escapeHtml(p.description) + '</div>' : '') + '</td>' +
-      '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
-      '<td>' + statusBadge(p.status) + '</td>' +
-      '<td style="min-width:160px;"><div style="display:flex;align-items:center;gap:10px;">' +
-        '<span class="progress"><span class="progress-bar" style="width:' + (p.progress || 0) + '%"></span></span>' +
-        '<span class="mono">' + (p.progress || 0) + '%</span>' +
-      '</div></td>' +
-      '<td class="mono">' + (p.updated_at ? fmtRelTime(p.updated_at) : '—') + '</td>' +
-    '</tr>';
-  }).join('');
-  tbody.querySelectorAll('[data-open-user]').forEach(tr => {
-    tr.addEventListener('click', () => openUser(tr.getAttribute('data-open-user')));
-  });
+
+  const draw = (q) => {
+    const filtered = !q ? rows : rows.filter(p => {
+      const pf = profileFor(p.user_id);
+      const hay = [
+        p.name, p.description, p.status, p.next_milestone,
+        userDisplayName(pf), pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
+      ].filter(Boolean).join(' ');
+      return matchAll(hay, q);
+    });
+    if (countEl) countEl.textContent = q
+      ? filtered.length + (filtered.length === 1 ? ' match' : ' matches')
+      : filtered.length + (filtered.length === 1 ? ' project' : ' projects');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No projects', 'Projects across all clients will appear here.');
+      return;
+    }
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No matches', 'Try a shorter query or a different field.');
+      return;
+    }
+    if (empty) empty.innerHTML = '';
+    tbody.innerHTML = filtered.map(p => {
+      const pf = profileFor(p.user_id);
+      return '<tr class="is-clickable" data-open-user="' + escapeHtml(p.user_id) + '">' +
+        '<td><div class="proj-name">' + escapeHtml(p.name || 'Untitled') + '</div>' +
+            (p.description ? '<div class="sub">' + escapeHtml(p.description) + '</div>' : '') + '</td>' +
+        '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
+        '<td>' + statusBadge(p.status) + '</td>' +
+        '<td style="min-width:160px;"><div style="display:flex;align-items:center;gap:10px;">' +
+          '<span class="progress"><span class="progress-bar" style="width:' + (p.progress || 0) + '%"></span></span>' +
+          '<span class="mono">' + (p.progress || 0) + '%</span>' +
+        '</div></td>' +
+        '<td class="mono">' + (p.updated_at ? fmtRelTime(p.updated_at) : '—') + '</td>' +
+      '</tr>';
+    }).join('');
+    tbody.querySelectorAll('[data-open-user]').forEach(tr => {
+      tr.addEventListener('click', () => openUser(tr.getAttribute('data-open-user')));
+    });
+  };
+
+  wireAllViewSearch(searchEl, draw);
+  draw((searchEl && searchEl.value || '').trim().toLowerCase());
 }
 
 async function renderInvoicesAll() {
@@ -2875,34 +2993,58 @@ async function renderInvoicesAll() {
 
   const tbody = $('[data-invoices-all-tbody]');
   const empty = $('[data-invoices-all-empty]');
+  const countEl = $('[data-invoices-all-count]');
+  const searchEl = $('#invoices-all-search');
   if (!tbody) return;
-  if (!rows.length) {
-    tbody.innerHTML = '';
-    if (empty) empty.innerHTML = emptyState('No invoices', 'Invoices across all clients will appear here.');
-    return;
-  }
-  if (empty) empty.innerHTML = '';
-  tbody.innerHTML = rows.map(i => {
-    const pf = profileFor(i.user_id);
-    return '<tr>' +
-      '<td><div class="proj-name">' + escapeHtml(i.number || 'INV-' + i.id) + '</div></td>' +
-      '<td><button class="btn btn-sm" type="button" data-open-user="' + escapeHtml(i.user_id) + '">' + escapeHtml(userDisplayName(pf)) + '</button></td>' +
-      '<td class="mono">' + escapeHtml(i.project_name || '—') + '</td>' +
-      '<td class="num">' + fmtMoney(i.amount_cents) + '</td>' +
-      '<td class="mono">' + fmtShortDate(i.due_at) + '</td>' +
-      '<td>' + statusBadge(i.status) + '</td>' +
-      '<td><button class="btn btn-sm" type="button" data-pdf-global="' + escapeHtml(i.id) + '">PDF</button></td>' +
-    '</tr>';
-  }).join('');
-  tbody.querySelectorAll('[data-open-user]').forEach(btn => {
-    btn.addEventListener('click', () => openUser(btn.getAttribute('data-open-user')));
-  });
-  tbody.querySelectorAll('[data-pdf-global]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const inv = rows.find(r => r.id === btn.getAttribute('data-pdf-global'));
-      if (inv) downloadInvoicePDF(inv, profileFor(inv.user_id));
+
+  const draw = (q) => {
+    const filtered = !q ? rows : rows.filter(i => {
+      const pf = profileFor(i.user_id);
+      const hay = [
+        i.number, i.project_name, i.status, i.notes,
+        userDisplayName(pf), pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
+      ].filter(Boolean).join(' ');
+      return matchAll(hay, q);
     });
-  });
+    if (countEl) countEl.textContent = q
+      ? filtered.length + (filtered.length === 1 ? ' match' : ' matches')
+      : filtered.length + (filtered.length === 1 ? ' invoice' : ' invoices');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No invoices', 'Invoices across all clients will appear here.');
+      return;
+    }
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No matches', 'Try a shorter query or a different field.');
+      return;
+    }
+    if (empty) empty.innerHTML = '';
+    tbody.innerHTML = filtered.map(i => {
+      const pf = profileFor(i.user_id);
+      return '<tr>' +
+        '<td><div class="proj-name">' + escapeHtml(i.number || 'INV-' + i.id) + '</div></td>' +
+        '<td><button class="btn btn-sm" type="button" data-open-user="' + escapeHtml(i.user_id) + '">' + escapeHtml(userDisplayName(pf)) + '</button></td>' +
+        '<td class="mono">' + escapeHtml(i.project_name || '—') + '</td>' +
+        '<td class="num">' + fmtMoney(i.amount_cents) + '</td>' +
+        '<td class="mono">' + fmtShortDate(i.due_at) + '</td>' +
+        '<td>' + statusBadge(i.status) + '</td>' +
+        '<td><button class="btn btn-sm" type="button" data-pdf-global="' + escapeHtml(i.id) + '">PDF</button></td>' +
+      '</tr>';
+    }).join('');
+    tbody.querySelectorAll('[data-open-user]').forEach(btn => {
+      btn.addEventListener('click', () => openUser(btn.getAttribute('data-open-user')));
+    });
+    tbody.querySelectorAll('[data-pdf-global]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const inv = rows.find(r => r.id === btn.getAttribute('data-pdf-global'));
+        if (inv) downloadInvoicePDF(inv, profileFor(inv.user_id));
+      });
+    });
+  };
+
+  wireAllViewSearch(searchEl, draw);
+  draw((searchEl && searchEl.value || '').trim().toLowerCase());
 }
 
 async function renderDeliverablesAll() {
@@ -2912,32 +3054,56 @@ async function renderDeliverablesAll() {
   );
   const tbody = $('[data-deliverables-all-tbody]');
   const empty = $('[data-deliverables-all-empty]');
+  const countEl = $('[data-deliverables-all-count]');
+  const searchEl = $('#deliverables-all-search');
   if (!tbody) return;
-  if (!rows.length) {
-    tbody.innerHTML = '';
-    if (empty) empty.innerHTML = emptyState('No deliverables', 'Files and artifacts across all clients will appear here.');
-    return;
-  }
-  if (empty) empty.innerHTML = '';
-  tbody.innerHTML = rows.map(d => {
-    const pf = profileFor(d.user_id);
-    return '<tr class="is-clickable" data-open-user="' + escapeHtml(d.user_id) + '">' +
-      '<td><div class="proj-name">' + escapeHtml(d.name || 'Untitled') + '</div>' +
-          '<div class="sub">' + escapeHtml((d.file_type || 'FILE').toString().toUpperCase()) + (d.size_label ? ' · ' + escapeHtml(d.size_label) : '') + '</div></td>' +
-      '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
-      '<td class="mono">' + escapeHtml(d.project_name || '—') + '</td>' +
-      '<td>' + statusBadge(d.status) + '</td>' +
-      '<td class="mono">' + escapeHtml(d.version || '—') + '</td>' +
-      '<td class="mono">' + (d.updated_at ? fmtRelTime(d.updated_at) : '—') + '</td>' +
-      '<td>' + (d.url ? '<a class="btn btn-sm" href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener">Open</a>' : '—') + '</td>' +
-    '</tr>';
-  }).join('');
-  tbody.querySelectorAll('[data-open-user]').forEach(tr => {
-    tr.addEventListener('click', (e) => {
-      if (e.target.tagName === 'A') return;
-      openUser(tr.getAttribute('data-open-user'));
+
+  const draw = (q) => {
+    const filtered = !q ? rows : rows.filter(d => {
+      const pf = profileFor(d.user_id);
+      const hay = [
+        d.name, d.file_type, d.size_label, d.status, d.version, d.project_name,
+        userDisplayName(pf), pf && pf.company_name, pf && pf.email, pf && pf.primary_domain,
+      ].filter(Boolean).join(' ');
+      return matchAll(hay, q);
     });
-  });
+    if (countEl) countEl.textContent = q
+      ? filtered.length + (filtered.length === 1 ? ' match' : ' matches')
+      : filtered.length + (filtered.length === 1 ? ' file' : ' files');
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No deliverables', 'Files and artifacts across all clients will appear here.');
+      return;
+    }
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.innerHTML = emptyState('No matches', 'Try a shorter query or a different field.');
+      return;
+    }
+    if (empty) empty.innerHTML = '';
+    tbody.innerHTML = filtered.map(d => {
+      const pf = profileFor(d.user_id);
+      return '<tr class="is-clickable" data-open-user="' + escapeHtml(d.user_id) + '">' +
+        '<td><div class="proj-name">' + escapeHtml(d.name || 'Untitled') + '</div>' +
+            '<div class="sub">' + escapeHtml((d.file_type || 'FILE').toString().toUpperCase()) + (d.size_label ? ' · ' + escapeHtml(d.size_label) : '') + '</div></td>' +
+        '<td>' + escapeHtml(userDisplayName(pf)) + '</td>' +
+        '<td class="mono">' + escapeHtml(d.project_name || '—') + '</td>' +
+        '<td>' + statusBadge(d.status) + '</td>' +
+        '<td class="mono">' + escapeHtml(d.version || '—') + '</td>' +
+        '<td class="mono">' + (d.updated_at ? fmtRelTime(d.updated_at) : '—') + '</td>' +
+        '<td>' + (d.url ? '<a class="btn btn-sm" href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener">Open</a>' : '—') + '</td>' +
+      '</tr>';
+    }).join('');
+    tbody.querySelectorAll('[data-open-user]').forEach(tr => {
+      tr.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') return;
+        openUser(tr.getAttribute('data-open-user'));
+      });
+    });
+  };
+
+  wireAllViewSearch(searchEl, draw);
+  draw((searchEl && searchEl.value || '').trim().toLowerCase());
 }
 
 async function renderActivityAll() {
