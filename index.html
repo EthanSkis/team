@@ -659,11 +659,12 @@ html[data-auth="signed-in"] .app { opacity: 1; }
   grid-template-columns: 300px 1fr;
   border: 1px solid var(--rule);
   border-radius: 2px;
+  height: calc(100dvh - var(--topbar-h) - 200px);
   min-height: 480px;
   overflow: hidden;
   background: rgba(243, 241, 234, 0.012);
 }
-.msg-list { border-right: 1px solid var(--rule); display: flex; flex-direction: column; }
+.msg-list { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; }
 .msg-threads { overflow-y: auto; flex: 1; }
 .msg-thread {
   padding: 14px 16px;
@@ -701,18 +702,20 @@ html[data-auth="signed-in"] .app { opacity: 1; }
   margin-top: 6px;
 }
 .msg-thread .unread-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
-.msg-pane { display: flex; flex-direction: column; }
+.msg-pane { display: flex; flex-direction: column; min-height: 0; }
 .msg-pane-head {
   padding: 18px 22px;
   border-bottom: 1px solid var(--rule);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex: 0 0 auto;
 }
 .msg-pane-head .title { font-family: var(--display); font-size: 18px; color: var(--ink); }
 .msg-pane-head .sub { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.18em; margin-top: 3px; }
 .msg-pane-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 22px;
   display: flex;
   flex-direction: column;
@@ -748,6 +751,7 @@ html[data-auth="signed-in"] .app { opacity: 1; }
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  flex: 0 0 auto;
 }
 .msg-composer .textarea { min-height: 48px; }
 .empty { text-align: center; color: var(--ink-dim); padding: 48px 24px; }
