@@ -744,6 +744,7 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
 }
 .msg-bubble {
   max-width: 72ch;
+  min-width: 0;
   padding: 14px 16px;
   border: 1px solid var(--rule);
   border-radius: 2px;
@@ -753,6 +754,8 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
   font-weight: 300;
   line-height: 1.5;
   color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .msg-bubble .author {
   font-family: var(--mono);
