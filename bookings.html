@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bookings \u00b7 ClearBot \u00b7 Team</title>
+<meta name="description" content="Intro-call booking requests submitted at signup.clearbot.io/book." />
+<link rel="icon" type="image/svg+xml" href="https://clearbot.io/assets/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0b0d; --bg-elev: #101114; --bg-elev-2: #14151a;
+    --ink: #f3f1ea; --ink-dim: #8a8880; --ink-faint: #3a3a38;
+    --rule: rgba(243,241,234,0.08); --rule-strong: rgba(243,241,234,0.16);
+    --accent: #ffffff; --accent-dim: #c8c6bf;
+    --ok: #9ccc9f; --warn: #d8c177; --bad: #d88c7c;
+    --display: "Fraunces","Times New Roman",serif;
+    --mono: "JetBrains Mono",ui-monospace,Menlo,monospace;
+    --ease: cubic-bezier(0.22,1,0.36,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--mono); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; min-height: 100dvh; padding: 28px 40px; max-width: 1200px; margin: 0 auto; }
+  .splash { position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: flex; align-items: center; justify-content: center; gap: 14px; color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.24em; }
+  .splash .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(255,255,255,0.35); animation: pulse 1.6s ease-in-out infinite; }
+  html[data-auth="signed-in"] .splash { display: none; }
+  .app { opacity: 0; transition: opacity 0.25s var(--ease); }
+  html[data-auth="signed-in"] .app { opacity: 1; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+
+  header.bar { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 24px; border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
+  header.bar .left { display: flex; gap: 14px; align-items: baseline; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-dim); }
+  header.bar .left a { color: var(--ink); text-decoration: none; }
+  header.bar .left a:hover { color: var(--accent); }
+  header.bar .right { display: flex; gap: 10px; align-items: center; }
+
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 3.5vw, 40px); letter-spacing: -0.02em; line-height: 1; margin-bottom: 6px; }
+  h1 em { font-style: italic; font-weight: 300; color: var(--ink-dim); }
+  .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.24em; color: var(--ink-dim); margin-bottom: 10px; }
+
+  .btn { appearance: none; border: 1px solid var(--rule-strong); background: rgba(243,241,234,0.02); color: var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 18px; border-radius: 2px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
+  .btn:hover { background: rgba(243,241,234,0.06); border-color: rgba(243,241,234,0.22); }
+  .btn[disabled] { opacity: 0.6; cursor: wait; }
+  .btn-sm { padding: 7px 12px; font-size: 10px; letter-spacing: 0.14em; }
+  .btn-primary { background: var(--accent); color: #0a0b0d; border-color: var(--accent); }
+  .btn-primary:hover { background: #f5f5f5; border-color: #f5f5f5; }
+  .btn-danger { background: var(--bad); color: #1a0f0c; border-color: var(--bad); }
+  .btn-danger:hover { background: #e29e90; border-color: #e29e90; }
+
+  .intro { padding: 16px 18px; border: 1px solid var(--rule-strong); background: rgba(243,241,234,0.02); border-radius: 2px; margin-bottom: 20px; font-family: var(--display); font-weight: 300; font-size: 14px; line-height: 1.55; color: var(--ink-dim); position: relative; }
+  .intro::before, .intro::after { content: ""; position: absolute; width: 12px; height: 12px; }
+  .intro::before { top: -1px; left: -1px; border-top: 1px solid var(--accent); border-left: 1px solid var(--accent); }
+  .intro::after { bottom: -1px; right: -1px; border-bottom: 1px solid var(--accent); border-right: 1px solid var(--accent); }
+  .intro strong { color: var(--ink); font-weight: 500; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; }
+
+  .controls { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+  .controls input, .controls select { background: var(--bg-elev); border: 1px solid var(--rule-strong); color: var(--ink); font-family: var(--mono); font-size: 13px; padding: 10px 14px; border-radius: 2px; outline: 0; }
+  .controls input:focus, .controls select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,255,255,0.06); }
+  .controls input { flex: 1; min-width: 240px; }
+  .controls select { padding: 10px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+  .controls .count { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.18em; white-space: nowrap; }
+
+  .table-wrap { border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; background: rgba(243,241,234,0.012); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--rule); font-size: 13px; vertical-align: middle; }
+  th { font-family: var(--mono); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink-dim); background: rgba(243,241,234,0.025); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background 0.18s var(--ease); cursor: pointer; }
+  tbody tr:hover { background: rgba(243,241,234,0.02); }
+  .name { font-family: var(--display); font-size: 15px; color: var(--ink); }
+  .sub { font-size: 10px; color: var(--ink-dim); text-transform: lowercase; margin-top: 3px; }
+  .mono { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); letter-spacing: 0.02em; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em; padding: 4px 10px; border: 1px solid var(--rule-strong); border-radius: 999px; color: var(--ink-dim); background: rgba(243,241,234,0.02); white-space: nowrap; }
+  .badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .badge.ok { color: var(--ok); border-color: rgba(156,204,159,0.28); }
+  .badge.warn { color: var(--warn); border-color: rgba(216,193,119,0.28); }
+  .badge.bad { color: var(--bad); border-color: rgba(216,140,124,0.28); }
+  .badge.accent { color: var(--accent); border-color: rgba(255,255,255,0.28); }
+
+  .empty { text-align: center; color: var(--ink-dim); padding: 48px 24px; border: 1px solid var(--rule); border-radius: 2px; }
+  .empty .headline { font-family: var(--display); font-size: 22px; color: var(--ink); margin-bottom: 8px; letter-spacing: -0.01em; }
+  .empty p { font-family: var(--display); font-style: italic; font-weight: 300; font-size: 14px; color: var(--ink-dim); max-width: 42ch; margin: 0 auto; }
+
+  .modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(5,6,8,0.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .modal { position: relative; width: 100%; max-width: 620px; background: var(--bg-elev); border: 1px solid var(--rule-strong); border-radius: 2px; padding: 30px 32px 26px; max-height: calc(100vh - 48px); overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.55); }
+  .modal::before { content: ""; position: absolute; top: -1px; left: -1px; width: 14px; height: 14px; border-top: 1px solid var(--accent); border-left: 1px solid var(--accent); }
+  .modal::after { content: ""; position: absolute; bottom: -1px; right: -1px; width: 14px; height: 14px; border-bottom: 1px solid var(--accent); border-right: 1px solid var(--accent); }
+  .modal-close { position: absolute; top: 12px; right: 12px; background: transparent; border: 0; color: var(--ink-dim); padding: 8px; cursor: pointer; line-height: 0; font-size: 18px; }
+  .modal-close:hover { color: var(--ink); }
+  .modal-eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.24em; color: var(--ink-dim); margin-bottom: 10px; }
+  .modal-title { font-family: var(--display); font-weight: 400; font-size: 26px; letter-spacing: -0.015em; line-height: 1.15; color: var(--ink); margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px dashed var(--rule); }
+  .modal-title em { font-style: italic; font-weight: 300; color: var(--ink-dim); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; padding: 16px 18px; border: 1px solid var(--rule); border-radius: 2px; background: rgba(243,241,234,0.012); }
+  .grid-2 a { color: var(--ink); }
+  .prose { font-family: var(--display); font-size: 15px; font-weight: 300; line-height: 1.55; color: var(--ink); margin-top: 8px; white-space: pre-wrap; }
+  .actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 18px; border-top: 1px dashed var(--rule); }
+  .actions-row .spacer { flex: 1; }
+  .status-btn[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+  .modal-error { margin-top: 14px; padding: 10px 12px; border: 1px solid rgba(216,140,124,0.28); border-radius: 2px; background: rgba(216,140,124,0.06); color: var(--bad); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+  .modal-error[hidden] { display: none; }
+
+  @media (max-width: 640px) {
+    body { padding: 20px; }
+    header.bar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    th:nth-child(3), td:nth-child(3), th:nth-child(6), td:nth-child(6) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="splash" aria-hidden="true"><span class="dot"></span><span>Checking session\u2026</span></div>
+
+<div class="app">
+  <header class="bar">
+    <div class="left">
+      <a href="/">ClearBot / Team</a>
+      <span style="color: var(--ink-faint);">/</span>
+      <span>Bookings</span>
+    </div>
+    <div class="right">
+      <a class="btn btn-sm" href="/">\u2190 Back to dashboard</a>
+      <button class="btn btn-sm" type="button" data-signout>Sign out</button>
+    </div>
+  </header>
+
+  <div class="eyebrow">Inbound</div>
+  <h1>Intro call <em>bookings</em>.</h1>
+  <p style="font-family: var(--display); font-weight: 300; font-size: 15px; color: var(--ink-dim); margin: 10px 0 24px;">Booking requests submitted at <em style="font-style: italic; color: var(--ink);">signup.clearbot.io/book</em>.</p>
+
+  <div class="intro">
+    <strong>Tip</strong> \u2014 click a row to see the full brief, update status, or reply by email.
+  </div>
+
+  <div class="controls">
+    <input id="search" type="search" placeholder="Search name, email, company, focus\u2026" autocomplete="off" />
+    <select id="status-filter">
+      <option value="">All statuses</option>
+      <option value="new">New</option>
+      <option value="contacted">Contacted</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="dropped">Dropped</option>
+    </select>
+    <span class="count" id="count">\u2014</span>
+  </div>
+
+  <div class="table-wrap" id="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 22%;">Name</th>
+          <th>Company</th>
+          <th>Focus</th>
+          <th>Preferred slot</th>
+          <th>Status</th>
+          <th>Received</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="empty"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL      = 'https://qunobrixpnerocdntkio.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_P-w2YUP5j2PcUPJrqZ3Xxg_Wk0BqSRu';
+  const LOGIN_URL         = 'https://login.clearbot.io';
+  const RETURN_URL        = window.location.href;
+  const COOKIE_DOMAIN     = '.clearbot.io';
+  const MAX_COOKIE_CHARS  = 3500;
+
+  // Allowlist mirrors the main team dashboard. Keep in sync with index.html.
+  const TEAM_EMAILS = ['ethan@clearbot.io'];
+
+  function writeCookie(name, value) { document.cookie = encodeURIComponent(name) + '=' + encodeURIComponent(value) + '; Domain=' + COOKIE_DOMAIN + '; Path=/; Max-Age=31536000; Secure; SameSite=Lax'; }
+  function deleteCookie(name)       { document.cookie = encodeURIComponent(name) + '=; Domain=' + COOKIE_DOMAIN + '; Path=/; Max-Age=0; Secure; SameSite=Lax'; }
+  function readCookie(name) {
+    const target = encodeURIComponent(name);
+    const parts = document.cookie ? document.cookie.split('; ') : [];
+    for (const p of parts) { const eq = p.indexOf('='); if (eq < 0) continue; if (p.slice(0, eq) === target) return decodeURIComponent(p.slice(eq + 1)); }
+    return null;
+  }
+  function allCookieNames() {
+    const parts = document.cookie ? document.cookie.split('; ') : [];
+    const names = [];
+    for (const p of parts) { const eq = p.indexOf('='); if (eq < 0) continue; try { names.push(decodeURIComponent(p.slice(0, eq))); } catch (_) { names.push(p.slice(0, eq)); } }
+    return names;
+  }
+  const crossDomainCookieStorage = {
+    getItem(key) {
+      if (readCookie(key + '.0') != null) { let result = ''; let i = 0; let chunk; while ((chunk = readCookie(key + '.' + i)) != null) { result += chunk; i++; } return result; }
+      return readCookie(key);
+    },
+    setItem(key, value) {
+      this.removeItem(key);
+      const s = String(value);
+      if (s.length <= MAX_COOKIE_CHARS) { writeCookie(key, s); return; }
+      for (let off = 0, i = 0; off < s.length; off += MAX_COOKIE_CHARS, i++) writeCookie(key + '.' + i, s.slice(off, off + MAX_COOKIE_CHARS));
+    },
+    removeItem(key) { deleteCookie(key); for (const n of allCookieNames()) if (n.startsWith(key + '.')) deleteCookie(n); },
+  };
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce', storage: crossDomainCookieStorage },
+  });
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+  function fmtRelTime(iso) {
+    if (!iso) return '\u2014';
+    const ts = new Date(iso).getTime();
+    if (isNaN(ts)) return '\u2014';
+    const diff = Math.max(0, (Date.now() - ts) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+    return new Date(iso).toLocaleDateString();
+  }
+  function fmtShortDate(iso) {
+    if (!iso) return '\u2014';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '\u2014' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function statusBadge(status) {
+    const s = (status || 'new').toLowerCase();
+    const map = { new: ['accent','New'], contacted: ['warn','Contacted'], scheduled: ['ok','Scheduled'], dropped: ['','Dropped'] };
+    const hit = map[s] || ['', status || 'New'];
+    return '<span class="badge ' + hit[0] + '"><span class="dot"></span>' + escapeHtml(hit[1]) + '</span>';
+  }
+
+  let rows = [];
+
+  async function fetchRows() {
+    const { data, error } = await supabase.from('booking_requests')
+      .select('id, name, email, company, focus, preferred_slot, preferred_slot_label, timezone, notes, source, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) { console.warn('[bookings]', error.message); return []; }
+    return data || [];
+  }
+
+  function render() {
+    const tbody   = document.getElementById('tbody');
+    const wrap    = document.getElementById('table-wrap');
+    const empty   = document.getElementById('empty');
+    const countEl = document.getElementById('count');
+    const q       = document.getElementById('search').value.trim().toLowerCase();
+    const status  = document.getElementById('status-filter').value.toLowerCase();
+
+    const filtered = rows.filter(r => {
+      if (status && (r.status || 'new').toLowerCase() !== status) return false;
+      if (!q) return true;
+      const hay = [r.name, r.email, r.company, r.focus, r.notes, r.status].filter(Boolean).join(' ').toLowerCase();
+      return q.split(/\s+/).every(p => hay.indexOf(p) !== -1);
+    });
+
+    countEl.textContent = filtered.length + (filtered.length === 1 ? ' booking' : ' bookings');
+
+    if (!rows.length) {
+      wrap.hidden = true;
+      empty.innerHTML = '<div class="empty"><div class="headline">No booking requests yet</div><p>When someone submits the form at signup.clearbot.io/book it will show up here.</p></div>';
+      return;
+    }
+    if (!filtered.length) {
+      wrap.hidden = true;
+      empty.innerHTML = '<div class="empty"><div class="headline">No matches</div><p>Try a different search term or clear the filters.</p></div>';
+      return;
+    }
+
+    wrap.hidden = false;
+    empty.innerHTML = '';
+    tbody.innerHTML = filtered.map(r =>
+      '<tr data-id="' + escapeHtml(r.id) + '">' +
+        '<td><div class="name">' + escapeHtml(r.name || '\u2014') + '</div><div class="sub">' + escapeHtml(r.email || '') + '</div></td>' +
+        '<td class="mono">' + escapeHtml(r.company || '\u2014') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.focus || '\u2014') + '</td>' +
+        '<td class="mono">' + escapeHtml(r.preferred_slot_label || (r.preferred_slot ? fmtShortDate(r.preferred_slot) : '\u2014')) + '</td>' +
+        '<td>' + statusBadge(r.status) + '</td>' +
+        '<td class="mono">' + fmtRelTime(r.created_at) + '</td>' +
+        '<td><button class="btn btn-sm" type="button" data-open="' + escapeHtml(r.id) + '">Open</button></td>' +
+      '</tr>'
+    ).join('');
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('click', () => open(tr.getAttribute('data-id')));
+    });
+    tbody.querySelectorAll('[data-open]').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); open(btn.getAttribute('data-open')); });
+    });
+  }
+
+  function open(id) {
+    const b = rows.find(r => r.id === id);
+    if (b) showDetail(b);
+  }
+
+  function showDetail(b) {
+    closeModal();
+    const mailHref = 'mailto:' + encodeURIComponent(b.email || '') +
+      '?subject=' + encodeURIComponent('Re: your ClearBot intro call') +
+      '&body=' + encodeURIComponent('Hi ' + (b.name ? b.name.split(/\s+/)[0] : 'there') + ',\n\nThanks for booking an intro call.\n\n');
+    const statusButtons = ['new','contacted','scheduled','dropped'].map(s =>
+      '<button type="button" class="btn btn-sm status-btn" data-status="' + s + '" data-active="' + ((b.status || 'new') === s) + '">' + s.charAt(0).toUpperCase() + s.slice(1) + '</button>'
+    ).join('');
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<button class="modal-close" type="button" data-close>&times;</button>' +
+        '<div class="modal-eyebrow">Booking request</div>' +
+        '<h2 class="modal-title"><em>' + escapeHtml(b.name || 'Unknown') + '</em></h2>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:20px;">' +
+          statusBadge(b.status) +
+          '<span class="mono" style="font-size:11px;color:var(--ink-dim);">Received ' + fmtRelTime(b.created_at) + '</span>' +
+        '</div>' +
+        '<div class="grid-2">' +
+          '<div><div class="modal-eyebrow">Email</div><div class="mono" style="font-size:13px;margin-top:6px;"><a href="' + mailHref + '">' + escapeHtml(b.email || '\u2014') + '</a></div></div>' +
+          '<div><div class="modal-eyebrow">Company</div><div class="prose" style="margin-top:6px;">' + escapeHtml(b.company || '\u2014') + '</div></div>' +
+          '<div><div class="modal-eyebrow">Focus</div><div class="prose" style="margin-top:6px;">' + escapeHtml(b.focus || '\u2014') + '</div></div>' +
+          '<div><div class="modal-eyebrow">Preferred slot</div><div class="prose" style="margin-top:6px;">' + escapeHtml(b.preferred_slot_label || '\u2014') + '</div></div>' +
+          '<div><div class="modal-eyebrow">Timezone</div><div class="mono" style="font-size:12px;margin-top:6px;color:var(--ink);">' + escapeHtml(b.timezone || '\u2014') + '</div></div>' +
+          '<div><div class="modal-eyebrow">Source</div><div class="mono" style="font-size:12px;margin-top:6px;color:var(--ink);">' + escapeHtml(b.source || '\u2014') + '</div></div>' +
+        '</div>' +
+        (b.notes ? '<section style="margin-bottom:20px;"><div class="modal-eyebrow">Notes</div><p class="prose">' + escapeHtml(b.notes) + '</p></section>' : '') +
+        '<div class="actions-row">' +
+          '<span style="font-size:10px;text-transform:uppercase;letter-spacing:0.18em;color:var(--ink-dim);">Status</span>' +
+          statusButtons +
+          '<span class="spacer"></span>' +
+          '<a class="btn btn-sm" href="' + mailHref + '">Reply by email</a>' +
+          '<button class="btn btn-sm btn-danger" type="button" data-delete>Delete</button>' +
+        '</div>' +
+        '<div class="modal-error" data-error hidden></div>' +
+      '</div>';
+
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('[data-close]').addEventListener('click', closeModal);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+    document.addEventListener('keydown', escToClose);
+
+    backdrop.querySelectorAll('[data-status]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const s = btn.getAttribute('data-status');
+        backdrop.querySelectorAll('[data-status]').forEach(x => x.setAttribute('disabled', 'true'));
+        const { error } = await supabase.from('booking_requests').update({ status: s }).eq('id', b.id);
+        if (error) { showError(backdrop, error.message); backdrop.querySelectorAll('[data-status]').forEach(x => x.removeAttribute('disabled')); return; }
+        b.status = s;
+        closeModal();
+        rows = await fetchRows();
+        render();
+      });
+    });
+    backdrop.querySelector('[data-delete]').addEventListener('click', async () => {
+      if (!confirm('Delete this booking request? This cannot be undone.')) return;
+      const { error } = await supabase.from('booking_requests').delete().eq('id', b.id);
+      if (error) { showError(backdrop, error.message); return; }
+      closeModal();
+      rows = await fetchRows();
+      render();
+    });
+  }
+
+  function showError(root, msg) {
+    const el = root.querySelector('[data-error]');
+    if (el) { el.textContent = msg || 'Error.'; el.hidden = false; }
+  }
+  function closeModal() {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.removeEventListener('keydown', escToClose);
+  }
+  function escToClose(e) { if (e.key === 'Escape') closeModal(); }
+
+  async function bootstrap() {
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess || !sess.session) {
+      window.location.replace(LOGIN_URL + '?next=' + encodeURIComponent(RETURN_URL));
+      return;
+    }
+    const email = (sess.session.user.email || '').toLowerCase();
+    const allowed = TEAM_EMAILS.some(e => e.toLowerCase() === email);
+    if (!allowed) {
+      document.querySelector('.app').innerHTML =
+        '<div class="eyebrow">Access</div>' +
+        '<h1>Not <em>authorized</em>.</h1>' +
+        '<p style="font-family:var(--display);font-weight:300;font-size:15px;color:var(--ink-dim);margin:12px 0 24px;max-width:56ch;">This page is for Clearbot staff. Your email isn\u2019t on the team allowlist.</p>' +
+        '<a class="btn btn-sm" href="https://client.clearbot.io">Go to client portal</a>';
+      document.documentElement.setAttribute('data-auth', 'signed-in');
+      return;
+    }
+    rows = await fetchRows();
+    document.documentElement.setAttribute('data-auth', 'signed-in');
+    document.getElementById('search').addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(render, 120); }; })());
+    document.getElementById('status-filter').addEventListener('change', render);
+    document.querySelectorAll('[data-signout]').forEach(b => b.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      window.location.replace(LOGIN_URL);
+    }));
+    render();
+  }
+
+  bootstrap().catch(e => {
+    console.error('[bookings] init failed:', e);
+    document.documentElement.setAttribute('data-auth', 'signed-in');
+  });
+</script>
+
+</body>
+</html>
