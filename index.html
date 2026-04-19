@@ -1113,10 +1113,6 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
       Activity
     </button>
-    <button class="nav-item" type="button" data-view="bookings-all">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      Bookings <span class="mono" data-sidebar-bookings-badge hidden style="margin-left:6px;padding:1px 6px;border:1px solid var(--rule-strong);border-radius:2px;font-size:9px;">0</span>
-    </button>
     <button class="nav-item" type="button" data-view="codes-all">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       Access Codes
@@ -1143,7 +1139,7 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
           <button type="button" class="btn" data-view-link="users">Browse clients</button>
         </div>
       </div>
-      <div class="tiles" style="grid-template-columns: repeat(6, 1fr);">
+      <div class="tiles" style="grid-template-columns: repeat(5, 1fr);">
         <div class="tile" data-tile="total-users">
           <div class="label">Clients</div>
           <div class="val">&mdash;</div>
@@ -1166,11 +1162,6 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
         </div>
         <div class="tile" data-tile="activity-7d">
           <div class="label">Activity &middot; 7d</div>
-          <div class="val">&mdash;</div>
-          <div class="delta">&nbsp;</div>
-        </div>
-        <div class="tile" data-tile="new-bookings" style="cursor:pointer;" data-view-link="bookings-all" title="Go to bookings">
-          <div class="label">New Bookings</div>
           <div class="val">&mdash;</div>
           <div class="delta">&nbsp;</div>
         </div>
@@ -1282,12 +1273,12 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
             <label class="form-label" for="det-role">Role</label>
             <div>
               <select class="select" id="det-role">
-                <option value="">(none)</option>
-                <option value="client">client</option>
-                <option value="team">team</option>
-                <option value="admin">admin</option>
+                <option value="">(none) &mdash; no dashboard access</option>
+                <option value="client">client &mdash; sees only their own projects, invoices, and messages</option>
+                <option value="team">team &mdash; can read every client's data through this dashboard</option>
+                <option value="admin">admin &mdash; same as team, plus can manage roles and access codes</option>
               </select>
-              <span class="form-help">Set to <strong>admin</strong> or <strong>team</strong> to let this user query others' rows via RLS.</span>
+              <span class="form-help">Set to <strong>admin</strong> or <strong>team</strong> to let this user query others' rows via RLS. Role alone isn't enough for the team dashboard &mdash; the user's email must also be in the <code>TEAM_EMAILS</code> allowlist.</span>
             </div>
           </div>
           <div class="form-row">
@@ -1533,51 +1524,6 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
       </section>
     </section>
 
-    <!-- BOOKINGS -->
-    <section class="view-pane" data-view-pane="bookings-all" hidden>
-      <div class="page-head">
-        <div>
-          <div class="eyebrow">Inbound</div>
-          <h1>Intro call <em>bookings</em>.</h1>
-        </div>
-        <div class="actions">
-          <select class="input" id="bookings-status-filter" style="width:auto;padding:8px 12px;font-size:12px;">
-            <option value="">All statuses</option>
-            <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="dropped">Dropped</option>
-          </select>
-        </div>
-      </div>
-      <section class="panel bracketed" style="margin-bottom:20px;">
-        <p class="modal-prose" style="margin:0;">
-          Booking requests submitted at <strong>signup.clearbot.io/book</strong>. Click a row for the full brief, to update status, or to delete.
-        </p>
-      </section>
-      <div class="search-bar">
-        <input class="input" id="bookings-search" type="search" placeholder="Search name, email, company, focus&hellip;" autocomplete="off" />
-        <span class="count" data-bookings-count>&mdash;</span>
-      </div>
-      <div class="table-wrap" data-bookings-wrap>
-        <table class="table">
-          <thead>
-            <tr>
-              <th style="width: 22%;">Name</th>
-              <th>Company</th>
-              <th>Focus</th>
-              <th>Preferred slot</th>
-              <th>Status</th>
-              <th>Received</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody data-bookings-tbody></tbody>
-        </table>
-      </div>
-      <div data-bookings-empty></div>
-    </section>
-
     <!-- ACCESS CODES ALL -->
     <section class="view-pane" data-view-pane="codes-all" hidden>
       <div class="page-head">
@@ -1589,6 +1535,13 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
           <button type="button" class="btn btn-primary" data-action="new-code">+ Access code</button>
         </div>
       </div>
+      <section class="panel bracketed" style="margin-bottom: 20px;">
+        <div class="panel-head">
+          <h2>What access codes are for</h2>
+        </div>
+        <p class="modal-prose">Access codes are single-use invites that let a specific prospect sign up for a client account on <code>client.clearbot.io</code>. Issue one after a scoping call when you're ready for them to self-serve their portal.</p>
+        <p class="modal-prose" style="margin-top: 10px;">Each code is tied to the name you put on it, so generate a new one per prospect rather than reusing. Codes are only needed for client signups &mdash; teammates are gated by the <code>TEAM_EMAILS</code> allowlist, not by codes.</p>
+      </section>
       <div class="search-bar">
         <input class="input" id="codes-all-search" type="search" placeholder="Search code or name&hellip;" autocomplete="off" />
         <span class="count" data-codes-all-count>&mdash;</span>
@@ -1614,14 +1567,16 @@ body:has(.view-pane[data-view-pane="messages-all"]:not([hidden])) .msg-shell {
       <div class="page-head">
         <div>
           <div class="eyebrow">Access</div>
-          <h1>Not <em>authorized</em>.</h1>
+          <h1>You don't have <em>access</em> to this dashboard yet.</h1>
         </div>
       </div>
       <section class="panel bracketed">
         <div class="empty">
-          <div class="headline">Your email is not on the team allowlist.</div>
-          <p>Sign in with an approved team account, or ask an admin to add your email to the <code>TEAM_EMAILS</code> constant in <code>index.html</code>.</p>
-          <div style="margin-top: 18px;">
+          <div class="headline">The team dashboard is for Clearbot staff.</div>
+          <p>It's where admins and teammates manage client accounts, projects, invoices, deliverables, and access codes. If you're a client looking for your own projects and invoices, you want the client portal instead.</p>
+          <p style="margin-top: 14px;">If you're a teammate who should have access: an admin needs to add your email to the <code>TEAM_EMAILS</code> allowlist and set your <code>profiles.role</code> to <code>'admin'</code> or <code>'team'</code>. Ping an admin once that's done and sign in again.</p>
+          <div style="margin-top: 20px; display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+            <a class="btn btn-primary" href="https://client.clearbot.io">Go to client portal</a>
             <button type="button" class="btn" data-signout>Sign out</button>
           </div>
         </div>
@@ -1854,6 +1809,7 @@ function openModal(opts) {
       '</div>' +
       '<div class="modal-body">' + bodyHtml + '</div>' +
       '<div class="modal-actions">' +
+        '<span class="modal-kbd-hint" aria-hidden="true" style="margin-right: auto; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint);">Enter to confirm &middot; Esc to cancel</span>' +
         '<button type="button" class="btn btn-ghost" data-modal-cancel>' + escapeHtml(cancelLabel) + '</button>' +
         '<button type="button" class="btn btn-' + (confirmVariant === 'danger' ? 'danger' : 'primary') + '" data-modal-confirm>' + escapeHtml(confirmLabel) + '</button>' +
       '</div>' +
@@ -2148,7 +2104,6 @@ const VIEW_TITLES = {
   'deliverables-all': 'Deliverables',
   'messages-all': 'Messages',
   'activity-all': 'Activity',
-  'bookings-all': 'Bookings',
   'codes-all': 'Access Codes',
   'unauthorized': 'Access',
 };
@@ -2178,7 +2133,6 @@ async function showView(name) {
     else if (name === 'messages-all')      await renderMessagesAll();
     else if (name === 'activity-all')      await renderActivityAll();
     else if (name === 'codes-all')         await renderCodesAll();
-    else if (name === 'bookings-all')      await renderBookingsAll();
   } catch (e) { console.error('[team] render failed for', name, e); }
 }
 
@@ -2238,20 +2192,6 @@ async function renderHome() {
     : 'Across ' + unreadClientCount + (unreadClientCount === 1 ? ' client' : ' clients'));
   setTile('activity-7d', recent7, 'notes this week');
   updateSidebarUnreadBadge(unreadThreads);
-
-  // Surface pending booking requests on the command-center and sidebar.
-  const newBookings = await countNewBookings();
-  setTile('new-bookings', newBookings, newBookings === 0 ? 'No new requests' : 'Awaiting reply');
-  const bookingsTile = document.querySelector('[data-tile="new-bookings"]');
-  if (bookingsTile && !bookingsTile.dataset.bound) {
-    bookingsTile.dataset.bound = '1';
-    bookingsTile.addEventListener('click', () => showView('bookings-all'));
-  }
-  const sideBadge = $('[data-sidebar-bookings-badge]');
-  if (sideBadge) {
-    if (newBookings > 0) { sideBadge.hidden = false; sideBadge.textContent = newBookings; }
-    else sideBadge.hidden = true;
-  }
 
   const feedRoot = $('[data-home-activity]');
   if (feedRoot) {
@@ -2402,7 +2342,14 @@ async function renderUserDetail() {
   const displayName = userDisplayName(profile);
   if (titleEl) titleEl.innerHTML = escapeHtml(displayName) +
     (profile && profile.primary_domain ? ' <em>@' + escapeHtml(profile.primary_domain) + '</em>' : '');
-  if (eyeEl) eyeEl.textContent = 'Client · ' + (profile && profile.email ? profile.email : state.selectedUserId);
+  if (eyeEl) {
+    const eyebrowLabel =
+      (profile && profile.company_name) ||
+      (profile && profile.email) ||
+      [profile && profile.first_name, profile && profile.last_name].filter(Boolean).join(' ').trim() ||
+      state.selectedUserId;
+    eyeEl.textContent = 'Client · ' + eyebrowLabel;
+  }
 
   fillProfileForm(profile || {});
   renderUserProjects(bundle);
@@ -2764,7 +2711,7 @@ function confirmDeleteProject(proj) {
   openModal({
     eyebrow: 'Delete project',
     title: 'Delete <em>' + escapeHtml(proj.name || 'Untitled') + '</em>?',
-    bodyHtml: '<p class="modal-prose">This removes the project row permanently. Deliverables, invoices and activity linked to it by ID will be orphaned.</p><div class="modal-error" data-modal-error hidden></div>',
+    bodyHtml: '<p class="modal-prose">This deletes the project permanently. Any deliverables, invoices, and activity linked to it will stay in the database but will no longer be grouped under this project.</p><p class="modal-prose"><strong>This cannot be undone.</strong> Consider archiving the project instead.</p><div class="modal-error" data-modal-error hidden></div>',
     confirmLabel: 'Delete',
     confirmVariant: 'danger',
     onConfirm: async (root) => {
@@ -2860,7 +2807,7 @@ function confirmDeleteInvoice(inv) {
   openModal({
     eyebrow: 'Delete invoice',
     title: 'Delete <em>' + escapeHtml(inv.number || 'invoice') + '</em>?',
-    bodyHtml: '<p class="modal-prose">This removes the invoice permanently. Consider marking it as paid or changing status instead.</p><div class="modal-error" data-modal-error hidden></div>',
+    bodyHtml: '<p class="modal-prose">This deletes the invoice permanently.</p><p class="modal-prose"><strong>This cannot be undone.</strong> Consider marking it as paid or changing its status instead.</p><div class="modal-error" data-modal-error hidden></div>',
     confirmLabel: 'Delete',
     confirmVariant: 'danger',
     onConfirm: async (root) => {
@@ -2941,7 +2888,7 @@ function confirmDeleteDeliverable(item) {
   openModal({
     eyebrow: 'Delete deliverable',
     title: 'Delete <em>' + escapeHtml(item.name || 'deliverable') + '</em>?',
-    bodyHtml: '<p class="modal-prose">This removes the deliverable row. External files at the URL are not affected.</p><div class="modal-error" data-modal-error hidden></div>',
+    bodyHtml: '<p class="modal-prose">This deletes the deliverable record. External files at the URL itself are not affected.</p><p class="modal-prose"><strong>This cannot be undone.</strong></p><div class="modal-error" data-modal-error hidden></div>',
     confirmLabel: 'Delete',
     confirmVariant: 'danger',
     onConfirm: async (root) => {
@@ -3620,7 +3567,7 @@ function confirmDeleteAccessCode(row) {
   openModal({
     eyebrow: 'Delete access code',
     title: 'Delete <em>' + escapeHtml(row.name || row.code) + '</em>?',
-    bodyHtml: '<p class="modal-prose">This permanently deletes the code <span class="mono">' + escapeHtml(row.code) + '</span>. Anyone holding it will no longer be able to sign up with it.</p><div class="modal-error" data-modal-error hidden></div>',
+    bodyHtml: '<p class="modal-prose">This permanently deletes the code <span class="mono">' + escapeHtml(row.code) + '</span>. Anyone holding it will no longer be able to sign up with it.</p><p class="modal-prose"><strong>This cannot be undone.</strong></p><div class="modal-error" data-modal-error hidden></div>',
     confirmLabel: 'Delete',
     confirmVariant: 'danger',
     onConfirm: async (root) => {
@@ -3729,206 +3676,6 @@ function wireNav() {
     search.addEventListener('input', () => {
       if (t) clearTimeout(t);
       t = setTimeout(() => renderUsers(search.value), 200);
-    });
-  }
-}
-
-// ============================================================================
-// Bookings (inbound from signup.clearbot.io/book)
-// ============================================================================
-async function listBookingRequests() {
-  return safeList(() =>
-    supabase.from('booking_requests')
-      .select('id, name, email, company, focus, preferred_slot, preferred_slot_label, timezone, notes, source, status, created_at')
-      .order('created_at', { ascending: false })
-      .limit(500)
-  );
-}
-async function updateBookingStatus(id, status) {
-  return safeWrite(() => supabase.from('booking_requests').update({ status }).eq('id', id));
-}
-async function deleteBookingRequest(id) {
-  return safeWrite(() => supabase.from('booking_requests').delete().eq('id', id));
-}
-async function countNewBookings() {
-  try {
-    const r = await supabase.from('booking_requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'new');
-    return r.count || 0;
-  } catch (_) { return 0; }
-}
-function bookingStatusBadge(status) {
-  const s = (status || 'new').toLowerCase();
-  const map = {
-    new:       ['accent', 'New'],
-    contacted: ['warn',   'Contacted'],
-    scheduled: ['ok',     'Scheduled'],
-    dropped:   ['',       'Dropped'],
-  };
-  const hit = map[s] || ['', status || 'New'];
-  return '<span class="badge ' + hit[0] + '"><span class="dot"></span>' + escapeHtml(hit[1]) + '</span>';
-}
-async function renderBookingsAll() {
-  const rows = await listBookingRequests();
-  const tbody = $('[data-bookings-tbody]');
-  const wrap  = $('[data-bookings-wrap]');
-  const emptyRoot = $('[data-bookings-empty]');
-  const searchEl  = $('#bookings-search');
-  const filterEl  = $('#bookings-status-filter');
-  const countEl   = $('[data-bookings-count]');
-  if (!tbody) return;
-
-  const draw = () => {
-    const q = (searchEl && searchEl.value || '').trim().toLowerCase();
-    const status = (filterEl && filterEl.value || '').toLowerCase();
-    const filtered = rows.filter(r => {
-      if (status && (r.status || 'new').toLowerCase() !== status) return false;
-      if (!q) return true;
-      const hay = [r.name, r.email, r.company, r.focus, r.notes, r.status]
-        .filter(Boolean).join(' ').toLowerCase();
-      return q.split(/\s+/).every(p => hay.indexOf(p) !== -1);
-    });
-    if (countEl) countEl.textContent = filtered.length + (filtered.length === 1 ? ' booking' : ' bookings');
-    if (!rows.length) {
-      if (wrap) wrap.hidden = true;
-      if (emptyRoot) emptyRoot.innerHTML = emptyState(
-        'No booking requests yet',
-        'When someone submits the form at signup.clearbot.io/book it will show up here.'
-      );
-      return;
-    }
-    if (!filtered.length) {
-      if (wrap) wrap.hidden = true;
-      if (emptyRoot) emptyRoot.innerHTML = emptyState('No matches', 'Try a different search term or clear the filters.');
-      return;
-    }
-    if (wrap) wrap.hidden = false;
-    if (emptyRoot) emptyRoot.innerHTML = '';
-    tbody.innerHTML = filtered.map(r =>
-      '<tr data-booking-row="' + escapeHtml(r.id) + '" style="cursor:pointer;">' +
-        '<td>' +
-          '<div class="proj-name">' + escapeHtml(r.name || '\u2014') + '</div>' +
-          '<div class="sub">' + escapeHtml(r.email || '') + '</div>' +
-        '</td>' +
-        '<td class="mono">' + escapeHtml(r.company || '\u2014') + '</td>' +
-        '<td class="mono">' + escapeHtml(r.focus || '\u2014') + '</td>' +
-        '<td class="mono">' + escapeHtml(r.preferred_slot_label || (r.preferred_slot ? fmtShortDate(r.preferred_slot) : '\u2014')) + '</td>' +
-        '<td>' + bookingStatusBadge(r.status) + '</td>' +
-        '<td class="mono">' + fmtRelTime(r.created_at) + '</td>' +
-        '<td><button type="button" class="btn btn-sm" data-booking-open="' + escapeHtml(r.id) + '">Open</button></td>' +
-      '</tr>'
-    ).join('');
-    const open = (id) => { const row = rows.find(x => x.id === id); if (row) showBookingDetail(row); };
-    tbody.querySelectorAll('[data-booking-row]').forEach(tr => {
-      tr.addEventListener('click', () => open(tr.getAttribute('data-booking-row')));
-    });
-    tbody.querySelectorAll('[data-booking-open]').forEach(btn => {
-      btn.addEventListener('click', (e) => { e.stopPropagation(); open(btn.getAttribute('data-booking-open')); });
-    });
-  };
-
-  if (searchEl && !searchEl.dataset.bound) {
-    searchEl.dataset.bound = '1';
-    let t = null;
-    searchEl.addEventListener('input', () => { if (t) clearTimeout(t); t = setTimeout(draw, 120); });
-  }
-  if (filterEl && !filterEl.dataset.bound) {
-    filterEl.dataset.bound = '1';
-    filterEl.addEventListener('change', draw);
-  }
-  draw();
-  refreshBookingsBadge(rows);
-}
-function refreshBookingsBadge(rows) {
-  const badge = $('[data-sidebar-bookings-badge]');
-  if (!badge) return;
-  const newCount = (rows || []).filter(r => (r.status || 'new').toLowerCase() === 'new').length;
-  if (newCount > 0) { badge.hidden = false; badge.textContent = newCount; }
-  else { badge.hidden = true; }
-}
-function showBookingDetail(booking) {
-  const statusButtons = ['new','contacted','scheduled','dropped'].map(s =>
-    '<button type="button" class="btn btn-sm" data-booking-status="' + s + '"' +
-    ((booking.status || 'new') === s ? ' style="border-color:var(--accent);color:var(--accent);"' : '') +
-    '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</button>'
-  ).join('');
-  const mailHref = 'mailto:' + encodeURIComponent(booking.email || '') +
-    '?subject=' + encodeURIComponent('Re: your ClearBot intro call') +
-    '&body=' + encodeURIComponent('Hi ' + (booking.name ? booking.name.split(/\s+/)[0] : 'there') + ',\n\nThanks for booking an intro call.\n\n');
-
-  openModal({
-    eyebrow: 'Booking request',
-    title: '<em>' + escapeHtml(booking.name || 'Unknown') + '</em>',
-    wide: true,
-    bodyHtml:
-      '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:20px;">' +
-        bookingStatusBadge(booking.status) +
-        '<span class="mono" style="font-size:11px;color:var(--ink-dim);">Received ' + fmtRelTime(booking.created_at) + '</span>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;padding:16px 18px;border:1px solid var(--rule);border-radius:2px;background:rgba(243,241,234,0.012);">' +
-        '<div><div class="modal-eyebrow">Email</div><div class="mono" style="font-size:13px;margin-top:6px;"><a href="' + mailHref + '" style="color:var(--ink);">' + escapeHtml(booking.email || '\u2014') + '</a></div></div>' +
-        '<div><div class="modal-eyebrow">Company</div><div style="font-family:var(--display);font-size:15px;margin-top:6px;color:var(--ink);">' + escapeHtml(booking.company || '\u2014') + '</div></div>' +
-        '<div><div class="modal-eyebrow">Focus</div><div style="font-family:var(--display);font-size:15px;margin-top:6px;color:var(--ink);">' + escapeHtml(booking.focus || '\u2014') + '</div></div>' +
-        '<div><div class="modal-eyebrow">Preferred slot</div><div style="font-family:var(--display);font-size:15px;margin-top:6px;color:var(--ink);">' + escapeHtml(booking.preferred_slot_label || '\u2014') + '</div></div>' +
-        '<div><div class="modal-eyebrow">Timezone</div><div class="mono" style="font-size:12px;margin-top:6px;color:var(--ink);">' + escapeHtml(booking.timezone || '\u2014') + '</div></div>' +
-        '<div><div class="modal-eyebrow">Source</div><div class="mono" style="font-size:12px;margin-top:6px;color:var(--ink);">' + escapeHtml(booking.source || '\u2014') + '</div></div>' +
-      '</div>' +
-      (booking.notes
-        ? '<section style="margin-bottom:20px;"><div class="modal-eyebrow">Notes</div><p style="font-family:var(--display);font-size:15px;font-weight:300;line-height:1.55;color:var(--ink);margin-top:8px;white-space:pre-wrap;">' + escapeHtml(booking.notes) + '</p></section>'
-        : '') +
-      '<section>' +
-        '<div class="modal-eyebrow" style="margin-bottom:10px;">Update status</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' +
-          statusButtons +
-          '<button type="button" class="btn btn-sm btn-danger" data-booking-delete style="margin-left:auto;">Delete</button>' +
-        '</div>' +
-      '</section>' +
-      '<div class="modal-error" data-modal-error hidden></div>',
-    confirmLabel: 'Close',
-    cancelLabel: 'Reply by email',
-    onCancel: () => { window.location.href = mailHref; },
-    onConfirm: () => true,
-  });
-
-  const root = document.querySelector('.modal-backdrop');
-  if (!root) return;
-  root.querySelectorAll('[data-booking-status]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const s = btn.getAttribute('data-booking-status');
-      root.querySelectorAll('[data-booking-status]').forEach(b => b.setAttribute('disabled', 'true'));
-      const res = await updateBookingStatus(booking.id, s);
-      if (!res.ok) {
-        setModalError(root, res.error || 'Update failed.');
-        root.querySelectorAll('[data-booking-status]').forEach(b => b.removeAttribute('disabled'));
-        return;
-      }
-      booking.status = s;
-      toast('Status set to ' + s);
-      root.remove();
-      await renderBookingsAll();
-    });
-  });
-  const delBtn = root.querySelector('[data-booking-delete]');
-  if (delBtn) {
-    delBtn.addEventListener('click', async () => {
-      openModal({
-        eyebrow: 'Delete booking',
-        title: 'Delete booking from <em>' + escapeHtml(booking.name || 'unknown') + '</em>?',
-        bodyHtml: '<p class="modal-prose">This removes the record from the database.</p><p class="modal-prose"><strong>This cannot be undone.</strong></p><div class="modal-error" data-modal-error hidden></div>',
-        confirmLabel: 'Delete',
-        confirmVariant: 'danger',
-        onConfirm: async (r) => {
-          setModalBusy(r, true, 'Deleting\u2026');
-          const res = await deleteBookingRequest(booking.id);
-          if (!res.ok) { setModalError(r, res.error || 'Failed.'); setModalBusy(r, false); return false; }
-          toast('Booking deleted');
-          const outer = document.querySelector('.modal-backdrop');
-          if (outer) outer.remove();
-          await renderBookingsAll();
-          return true;
-        },
-      });
     });
   }
 }
